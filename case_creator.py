@@ -75,6 +75,8 @@ MAX_CASE_RETRIES = int(_env_or_default("CASE_MAX_RETRIES", "4"))
 INITIAL_BACKOFF = float(_env_or_default("CASE_INITIAL_BACKOFF", "5"))
 BATCH_SLEEP = float(_env_or_default("CASE_BATCH_SLEEP", "0"))
 CASE_PLAN_PATH = Path(_env_or_default("CASE_PLAN_PATH", "latest_case_plan.json"))
+BULK_MAX_ACCOUNTS_PER_CASE = int(_env_or_default("BULK_MAX_ACCOUNTS_PER_CASE", "5"))
+BULK_MAX_CAMPAIGN_IDS_LEN = int(_env_or_default("BULK_MAX_CAMPAIGN_IDS_LEN", "240"))
 
 # ---------------------------------------------------------------------------
 # Database helpers
@@ -322,44 +324,52 @@ class CaseBuilder:
         self._accessor = accessor
         self._plan_index = plan_index
 
-    def build_bulk_trigger_case(self, trigger_name: str, max_accounts: Optional[int] = None) -> Optional[CasePayload]:
-        if not self._plan_index:
-            raise ValueError("Bulk trigger cases require a case plan index")
-        trigger_case = self._plan_index.get_bulk_trigger(trigger_name)
-        if not trigger_case:
-            return None
+    @staticmethod
+    def _render_pipe_table(headers: list[str], rows: list[list[str]]) -> list[str]:
+        lines = [" | ".join(headers), " | ".join(["---"] * len(headers))]
+        for row in rows:
+            lines.append(" | ".join(row))
+        return lines
 
-        accounts = trigger_case.get("accounts", []) or []
-        if not accounts:
-            return None
-        if max_accounts is not None:
-            accounts = accounts[:max_accounts]
-
-        # Use first account as primary for required Salesforce fields
-        primary = accounts[0]
-        publisher_id = int(primary.get("account_id"))
-        account_name = primary.get("account_name") or "Bulk Trigger"
-
-        # Aggregate campaign IDs across accounts
-        campaign_ids: list[str] = []
+    @staticmethod
+    def _collect_campaign_ids(accounts: Sequence[dict[str, Any]]) -> list[str]:
+        ids: list[str] = []
+        seen = set()
         for acct in accounts:
             for cid in acct.get("campaign_ids", []) or []:
                 cid_str = str(cid)
-                if cid_str not in campaign_ids:
-                    campaign_ids.append(cid_str)
+                if cid_str and cid_str not in seen:
+                    seen.add(cid_str)
+                    ids.append(cid_str)
+        return ids
 
+    def _build_bulk_payload(
+        self,
+        trigger_name: str,
+        accounts: Sequence[dict[str, Any]],
+        part_label: Optional[str] = None,
+    ) -> CasePayload:
+        # Use first account as primary for required Salesforce fields
+        primary = accounts[0]
+        publisher_id = int(primary.get("account_id"))
+
+        campaign_ids = self._collect_campaign_ids(accounts)
         campaign_ids_str = ", ".join(campaign_ids) if campaign_ids else "Unknown"
         trigger_detail = trigger_name
 
         description_lines = [
-            f"Malicious URL Post-Click Alerts : {trigger_name}",
-            "",
-            "Accounts:",
+            "Malicious URL Post-Click Alerts",
+            f"Trigger: {trigger_name}",
         ]
-        for acct in accounts:
-            account_id = acct.get("account_id")
-            account_name = acct.get("account_name") or "Unknown"
-            description_lines.append(f"• {account_id} - {account_name} :")
+        if part_label:
+            description_lines.append(f"Batch: {part_label}")
+        description_lines.append("")
+        description_lines.append("Accounts:")
+
+        entry_lines: list[str] = []
+        for idx, acct in enumerate(accounts, start=1):
+            account_id = str(acct.get("account_id", "Unknown"))
+            account_name = str(acct.get("account_name") or "Unknown")
 
             latest_per_campaign: dict[str, dict[str, Any]] = {}
             for alert in acct.get("alerts", []) or []:
@@ -372,9 +382,28 @@ class CaseBuilder:
                         "url": alert.get("alert_details_url", ""),
                     }
 
+            entry_lines.append(f"{idx}. Account ID: {account_id}")
+            entry_lines.append(f"   Name:       {account_name}")
+
+            if not latest_per_campaign:
+                entry_lines.append("   Campaign:   Unknown")
+                entry_lines.append("   Alert URL:  Unavailable")
+                entry_lines.append("")
+                continue
+
+            entry_lines.append("   Alerts:")
             for cid in sorted(latest_per_campaign):
                 url = latest_per_campaign[cid]["url"] or "Unavailable"
-                description_lines.append(f"  Campaign {cid} : {url}")
+                entry_lines.append(f"     - Campaign {cid}: {url}")
+            entry_lines.append("")
+
+        if entry_lines and entry_lines[-1] == "":
+            entry_lines.pop()
+        description_lines.extend(entry_lines)
+
+        subject = f"Malicious URL Post-Click Alerts : {trigger_name}"
+        if part_label:
+            subject = f"{subject} ({part_label})"
 
         payload = {
             "record_type": "0123o00000224fEAAQ",
@@ -383,7 +412,7 @@ class CaseBuilder:
             "backstage_account_id": str(publisher_id),
             "flag_origin": "GeoEdge",
             "owner_id": "0050V000007mBZkQAM",
-            "subject": f"Malicious URL Post-Click Alerts : {trigger_name}",
+            "subject": subject,
             "description": "\n".join(description_lines),
             "status": "New",
             "case_origin": "R&D Alert",
@@ -392,6 +421,63 @@ class CaseBuilder:
             "ge_scanned": "Yes",
         }
         return CasePayload(publisher_id=publisher_id, payload=payload)
+
+    def build_bulk_trigger_cases(
+        self,
+        trigger_name: str,
+        max_accounts: Optional[int] = None,
+        max_accounts_per_case: Optional[int] = None,
+        max_campaign_ids_len: Optional[int] = None,
+    ) -> list[CasePayload]:
+        if not self._plan_index:
+            raise ValueError("Bulk trigger cases require a case plan index")
+        trigger_case = self._plan_index.get_bulk_trigger(trigger_name)
+        if not trigger_case:
+            return []
+
+        accounts = trigger_case.get("accounts", []) or []
+        if not accounts:
+            return []
+        if max_accounts is not None:
+            accounts = accounts[:max_accounts]
+
+        per_case_limit = max_accounts_per_case or BULK_MAX_ACCOUNTS_PER_CASE
+        campaign_len_limit = max_campaign_ids_len or BULK_MAX_CAMPAIGN_IDS_LEN
+
+        batches: list[list[dict[str, Any]]] = []
+        current_accounts: list[dict[str, Any]] = []
+        current_campaign_ids: list[str] = []
+
+        for acct in accounts:
+            next_accounts = current_accounts + [acct]
+            next_campaign_ids = self._collect_campaign_ids(next_accounts)
+            next_campaign_len = len(", ".join(next_campaign_ids)) if next_campaign_ids else 0
+
+            too_many_accounts = per_case_limit and len(next_accounts) > per_case_limit
+            too_long_campaigns = campaign_len_limit and next_campaign_len > campaign_len_limit
+
+            if (too_many_accounts or too_long_campaigns) and current_accounts:
+                batches.append(current_accounts)
+                current_accounts = [acct]
+                current_campaign_ids = self._collect_campaign_ids(current_accounts)
+                continue
+
+            current_accounts = next_accounts
+            current_campaign_ids = next_campaign_ids
+
+        if current_accounts:
+            batches.append(current_accounts)
+
+        total = len(batches)
+        payloads: list[CasePayload] = []
+        for idx, batch in enumerate(batches, start=1):
+            part_label = f"Part {idx}/{total}" if total > 1 else None
+            payloads.append(self._build_bulk_payload(trigger_name, batch, part_label=part_label))
+        return payloads
+
+    def build_bulk_trigger_case(self, trigger_name: str, max_accounts: Optional[int] = None) -> Optional[CasePayload]:
+        payloads = self.build_bulk_trigger_cases(trigger_name, max_accounts=max_accounts)
+        return payloads[0] if payloads else None
 
     def build(self, publisher_id: int) -> Optional[CasePayload]:
         core = self._accessor.fetch_core(publisher_id)
@@ -658,12 +744,25 @@ class CaseRunner:
                 time.sleep(self._batch_sleep)
         return results
 
-    def run_bulk_trigger(self, trigger_name: str, max_accounts: Optional[int] = None) -> list[CaseResult]:
-        payload = self._builder.build_bulk_trigger_case(trigger_name, max_accounts=max_accounts)
-        if payload is None:
+    def run_bulk_trigger(
+        self,
+        trigger_name: str,
+        max_accounts: Optional[int] = None,
+        max_accounts_per_case: Optional[int] = None,
+        max_campaign_ids_len: Optional[int] = None,
+    ) -> list[CaseResult]:
+        payloads = self._builder.build_bulk_trigger_cases(
+            trigger_name,
+            max_accounts=max_accounts,
+            max_accounts_per_case=max_accounts_per_case,
+            max_campaign_ids_len=max_campaign_ids_len,
+        )
+        if not payloads:
             return [CaseResult(0, False, error=f"No bulk trigger case found for '{trigger_name}'")]
-        result = self._poster.post(payload)
-        return [result]
+        results: list[CaseResult] = []
+        for payload in payloads:
+            results.append(self._poster.post(payload))
+        return results
 
 
 # ---------------------------------------------------------------------------
@@ -726,6 +825,16 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         type=int,
         help="Limit number of accounts included in a bulk trigger case.",
     )
+    parser.add_argument(
+        "--bulk-batch-size",
+        type=int,
+        help="Maximum accounts per bulk trigger case (defaults to env BULK_MAX_ACCOUNTS_PER_CASE).",
+    )
+    parser.add_argument(
+        "--bulk-max-campaign-ids-len",
+        type=int,
+        help="Max length for campaign_ids field before splitting (defaults to env BULK_MAX_CAMPAIGN_IDS_LEN).",
+    )
     return parser.parse_args(argv)
 
 
@@ -746,7 +855,12 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     try:
         if args.bulk_trigger:
             publisher_ids = []
-            results = runner.run_bulk_trigger(args.bulk_trigger, max_accounts=args.bulk_max_accounts)
+            results = runner.run_bulk_trigger(
+                args.bulk_trigger,
+                max_accounts=args.bulk_max_accounts,
+                max_accounts_per_case=args.bulk_batch_size,
+                max_campaign_ids_len=args.bulk_max_campaign_ids_len,
+            )
         else:
             publisher_ids = _parse_publisher_ids(args, plan_index)
             results = runner.run(publisher_ids)
