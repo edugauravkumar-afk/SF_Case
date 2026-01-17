@@ -1,0 +1,3 @@
+python-dotenv
+PyMySQL
+requests

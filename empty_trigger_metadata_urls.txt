@@ -1,0 +1,247 @@
+Alerts	Trigger
+https://site.geoedge.com/analyticsv2/ad/28473859904/50321f8b79c0413fee60cf9afb391aff/alert:5.609289598577E%2B20	Deceptive Site 
+https://site.geoedge.com/analyticsv2/ad/28473859118/5ecfc9232a663afab41435d3b77347df/alert:5.609289194021E%2B20	Deceptive Site
+https://site.geoedge.com/analyticsv2/ad/28473845805/4f266abb102ed621dfaaf337e29f23f8/alert:5.6092836454161E%2B20	Back Button Hijack 
+https://site.geoedge.com/analyticsv2/ad/28473837912/594d41a3d33a587297bbeebaff17c3fa/alert:5.609280881229E%2B20	Deceptive Site
+https://site.geoedge.com/analyticsv2/ad/28473836685/cd009cee66a182f1273005a8ffd85ffe/alert:5.6092802719155E%2B20	Deceptive Site
+https://site.geoedge.com/analyticsv2/ad/28473825216/0fdd891d4ab2b42537c758a277a9b01b/alert:5.609273394664E%2B20	Deceptive Site
+https://site.geoedge.com/analyticsv2/ad/28473823911/d7d6973b5afd6988dda29d44285ac02b/alert:5.6092729932199E%2B20	Back Button Hijack 
+https://site.geoedge.com/analyticsv2/ad/28473822704/c26222872d58165a60565c5641b9f17f/alert:5.6092726822662E%2B20	Deceptive Site
+https://site.geoedge.com/analyticsv2/ad/28473821839/7ba115bd3f0605ccb374276fc277d22a/alert:5.6092724759863E%2B20	Deceptive Site
+https://site.geoedge.com/analyticsv2/ad/28473821305/03e0b643f657346086f98a1040d16cb8/alert:5.6092723292178E%2B20	Deceptive Site
+https://site.geoedge.com/analyticsv2/ad/28473819097/23ec8a58df008ad1b4adb9c109a83808/alert:5.6092718612177E%2B20	Back Button Hijack 
+https://site.geoedge.com/analyticsv2/ad/28473818983/2fff1f0d7ee92d723946c11df3c78c02/alert:5.6092717271426E%2B20	Deceptive Site
+https://site.geoedge.com/analyticsv2/ad/28473815285/8edcf791c77a5db8e1cf3d5f5e5beaed/alert:5.6092706959691E%2B20	Deceptive Site
+https://site.geoedge.com/analyticsv2/ad/28473814304/a6921403e94856c0db9749744cc3b884/alert:5.6092704625664E%2B20	Deceptive Site
+https://site.geoedge.com/analyticsv2/ad/28473812694/7652ea8dba2615acbf034d70dc3575a9/alert:5.6092700688059E%2B20	Deceptive Site
+https://site.geoedge.com/analyticsv2/ad/28473811444/26ee944d4d16da6dd69197f6b09f2fa6/alert:5.6092697752925E%2B20	Deceptive Site
+https://site.geoedge.com/analyticsv2/ad/28473811285/36983feb591c54041f31df69939a0507/alert:5.6092697519426E%2B20	Deceptive Site
+https://site.geoedge.com/analyticsv2/ad/28473810826/9e91ffba406c1c032e0c7f09e60e59aa/alert:5.6092696196642E%2B20	Deceptive Site
+https://site.geoedge.com/analyticsv2/ad/28473810008/ff7f9f2c2ec1675f813a2a831e37e47b/alert:5.6092692916637E%2B20	Back Button Hijack 
+https://site.geoedge.com/analyticsv2/ad/28473809874/24ffa96441af44ee51f76d0350b6e4a9/alert:5.6092692558697E%2B20	Deceptive Site
+https://site.geoedge.com/analyticsv2/ad/28473809888/6c5b60cf5276ece40d2b79bcf1b7abf8/alert:5.6092692569192E%2B20	Deceptive Site
+https://site.geoedge.com/analyticsv2/ad/28473809506/70709bc9d746f9d29ee21d6235dc6d76/alert:5.6092691668598E%2B20	Back Button Hijack 
+https://site.geoedge.com/analyticsv2/ad/28473809092/49b4b5f9d42346204bb024d40ae523f1/alert:5.609269064517E%2B20	Deceptive Site
+https://site.geoedge.com/analyticsv2/ad/28473808999/af80f99bf13732949c135463fe4fd648/alert:5.6092690234171E%2B20	Deceptive Site
+https://site.geoedge.com/analyticsv2/ad/28473808438/a638d6de721838b4e9815454bd88f97d/alert:5.6092688778788E%2B20	Back Button Hijack 
+https://site.geoedge.com/analyticsv2/ad/28473808312/7aea7fc728c4e2a8c4b902acfe2ad46a/alert:5.6092688080685E%2B20	Deceptive Site
+https://site.geoedge.com/analyticsv2/ad/28473808425/56867229b9d608633ae9fa822417c91c/alert:5.6092688593725E%2B20	Back Button Hijack 
+https://site.geoedge.com/analyticsv2/ad/28473808251/50bcea641f542528a5a1bee0ede18520/alert:5.6092687943432E%2B20	Deceptive Site
+https://site.geoedge.com/analyticsv2/ad/28473808189/c3ee0b0c2402766800876a695dda6f98/alert:5.6092687365713E%2B20	Back Button Hijack 
+https://site.geoedge.com/analyticsv2/ad/28473807412/d26238bd0b21b6eca76bb012eb509360/alert:5.6092685071944E%2B20	Deceptive Site
+https://site.geoedge.com/analyticsv2/ad/28473807222/d6dd45e50b87395e626ad31b1e6d40ef/alert:5.6092684646396E%2B20	Back Button Hijack 
+https://site.geoedge.com/analyticsv2/ad/28473807158/31e994ec79ba4b85ac3106faefd830a0/alert:5.6092684545944E%2B20	Back Button Hijack 
+https://site.geoedge.com/analyticsv2/ad/28473807537/ccd4e5eff04fd4cdebbad079324a110c/alert:5.6092686169558E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473807769/418fc98f78a8b9bc51943b4983e3f33d/alert:5.6092686048574E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473807773/09a8f8591b847d64f60f395dfc13811d/alert:5.6092686497798E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473807447/a83806e02c61136c1dc67a2462272125/alert:5.6092685280415E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473807065/54cb025cfe6105d780b7e80f338e2c3b/alert:5.6092684012508E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473806947/98fc93cdf80ba1d043f10706aec2bb4f/alert:5.6092683469687E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473806776/963de385f105223d59f584dc6998fb38/alert:5.6092683326443E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473806306/01fd02117229fd8c9d836ffd640c9130/alert:5.6092682354997E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473806342/13861cc9caa15b8beb0f00705d00f704/alert:5.6092682354731E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473805619/25f9d50c9a693a0c171448bbf45d5f00/alert:5.6092679956635E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473806244/b7480277269062a9be658de598aa1b8b/alert:5.6092682044931E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473805535/264771bdb12756496c5cf0be47472634/alert:5.609268069093E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473805686/d12995c96e6468ffa8d33938129fd4ac/alert:5.6092680105708E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473804732/3ba0587cf8db4b258a1355009bdcff82/alert:5.6092677249701E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473804706/48430c3b965ee7f2816f0a7726c3027b/alert:5.6092677349392E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473803745/9e865b47ec9dd5285c81cd27d8eb57db/alert:5.6092674932329E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473804231/e48efdabbf6d178c72f59da17e361d84/alert:5.609267639657E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473803914/51422d0bd7447a35dcc9f719a7bd8980/alert:5.6092675296576E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473804010/d4fc2482276f914223a469a52460de14/alert:5.6092675528404E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473803303/68317455d75577ef3d709c82f6cc436d/alert:5.6092673267181E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473803790/2b3d17717075c2f5a74eb3b5071f96aa/alert:5.6092674855829E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473803606/eb8278e5efa67e0473a1af453324c10e/alert:5.609267458447E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473802861/f933285da2b43a32180db12a0d8d98b6/alert:5.6092673230734E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473802214/cf8a5791a3e0f3a0840a221885e628ee/alert:5.6092670549555E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473802669/9665c8963adaae4f142376a83bacc5d7/alert:5.6092671821747E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473802717/9670355f2636754d98edcc41b6e71bfb/alert:5.609267189068E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473802472/586b5639dd9510f8bf842158ee535f27/alert:5.6092671775348E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473802307/f6358cead5321e1c71c5ccd9ad570f52/alert:5.6092670712831E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473802239/5c021a61b97352ed61dc8998b645572f/alert:5.6092670593109E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473801389/48e6d027c54c9de3c036b8458c5d5bee/alert:5.6092668326376E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473802086/8addf9022f6bd6262d1611864f5b599e/alert:5.6092670263229E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473801394/49361502ce589eddef28cea464c9feb3/alert:5.6092668726317E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473801224/9ff09713cbda71929cd350b21b186382/alert:5.6092667693813E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473801021/3eb271dfdd207508e0a5d189510a237e/alert:5.6092667197097E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473800970/e79c447cf2940337551b9940e2e2fd32/alert:5.6092667842642E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473800932/fbd128cc852ffea0012d2902009d2b22/alert:5.6092667138512E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473800099/ae74b8574ab341e2b673ea127dc2b843/alert:5.6092664865405E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473799820/175594e56b549752fa24b787648a4b17/alert:5.6092664244597E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473799152/a0caa9467b18df689b8167d85634e308/alert:5.6092662635374E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473799630/8258c0935c675acc1054c2c08c0a8b90/alert:5.6092663588411E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473799678/67ed34a546aa9a478ffdbce9b2937546/alert:5.6092663739918E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473799780/a465a024e8f70944b9968c40cd9e854c/alert:5.609266395794E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473799504/2c3e390705608a39754b31c0ff3633c8/alert:5.6092663155115E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473799135/3485fc88274c8586fde62f93be1dee1b/alert:5.6092662217488E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473799264/9437e36342ae46326f89cb80581358ae/alert:5.6092662636763E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473798572/3f1de7727cd7a485f654c91f27ef5160/alert:5.6092660977413E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473798312/16f0ddeca2c81f542458db1d3cb06e44/alert:5.6092659502805E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473797770/13abce3ffa8325918bca16df9bab966b/alert:5.6092657908314E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473796834/0015cc32a90fcc88a1ad8dbbd17f2437/alert:5.6092655842322E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473797231/35c00659f6931d01338019510e9b2272/alert:5.6092656544675E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473796732/5c377d6c1f973cad71ec95e050cd0317/alert:5.6092655544574E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473796865/3e964c5cb54cefefb5ceb8295d757c16/alert:5.6092655977423E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473796858/a13e2539f3f016d99829dbfe9c4de817/alert:5.6092656074681E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473796914/85910a57563834c175c8889e4cc65225/alert:5.6092655655387E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473796626/d707760f7ef2b3d6f4c4e6f6a0175dfd/alert:5.6092654817533E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473794925/29cfb1540d5fcd02fda6c5a200d41030/alert:5.6092649692689E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473794646/c0d384dedf1f3961920172e2b3c217eb/alert:5.6092649481904E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473795377/de1e6ee1f4e8e714eda5a76bbd925e88/alert:5.6092651687901E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473794649/9b796d9c7b425d057461e7ae1a6d2eeb/alert:5.6092649146129E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473795450/c7ddf64791c30fc4c157ab732b438beb/alert:5.6092651740593E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473795414/45241400f3edc110996e9260b5225705/alert:5.6092651783569E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473794875/33359d2dd53445a4784faef95fb4ef7e/alert:5.6092650035534E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473794181/441dacc6f17db3205cf4b366bee676bf/alert:5.6092647611994E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473794558/71e86e29fec06e1fd575db7df0a00285/alert:5.609265006595E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473794109/07e254c36002545c16c00a4761d02275/alert:5.6092647598288E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473794110/fa3c947ae216daa35dcec1af7514f138/alert:5.6092647469279E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473794454/9f440cd5e06c7fd109a797d12d6d7d84/alert:5.6092650134421E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473794221/34454954437a757468d9583fa12ca618/alert:5.6092647636693E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473794066/835c9dd96f4b9e6aebd0012225d87fc8/alert:5.6092647396837E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473794274/c524d41b10a0192277c605964e0fd75b/alert:5.6092648247935E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473793626/5aa50dcccac4a08a271d8fdefa5389fe/alert:5.6092646122873E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473793752/7d34069457a12dc770e99b20835664c3/alert:5.6092646484984E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473793775/aed4018d50535b347c4dab54a6a7634c/alert:5.6092646573005E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473793844/0e649d6fcccfd07c8a3f3a18786a9bbd/alert:5.6092647036381E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473793638/123fc84f08b214b4b919348bc9664b60/alert:5.6092646217697E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473793191/8ac529c0128a740aa7ef35fadf3c9246/alert:5.6092645169123E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473793246/1b8810ddfe4c49caea766ba8ce978f54/alert:5.6092645266082E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473793245/d60b13364d5e9ff94abe8f567e68c62e/alert:5.6092645192927E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473792883/c24c0d3634dfae05fe79bda9143cd8b0/alert:5.6092644092553E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473792298/b018eec4dff8c97b79dd858fd8e59944/alert:5.6092642231121E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473792736/d1bba73d6e12196fe3aee73936bfb55c/alert:5.609264356094E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473792298/b018eec4dff8c97b79dd858fd8e59944/alert:5.6092642498774E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473792198/16929753816a2e54bea3696eea37b9e7/alert:5.6092642455535E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473792145/faa6a23025f0a61dfe3bec7dda9a5703/alert:5.6092641129601E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473792617/19de93d14d4057f29fd31d724189eaf7/alert:5.6092643110112E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473792154/8d3674bdff118b742b05c7a886675c9f/alert:5.6092641218515E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473792200/e47c5f92452e7a4cf6467070807e8e47/alert:5.6092641386013E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473792402/09b11b5f842df7b6d293c4680aad4859/alert:5.609264243315E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473792355/f8166244752370892c4820b7f7f09d84/alert:5.6092642357646E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473792400/1169991b48580f8c86053ad62cd084d7/alert:5.6092642443447E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473792105/39aff5d4ce1e3d850b9b0dc0120d2d55/alert:5.6092641019481E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473791670/9a9e3b8254c9df20abf1743f0a22b575/alert:5.6092639721198E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473791929/6ca7dead3197c79d947d5099c8e26653/alert:5.6092640630055E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473791834/9ef70a9ec2dc9033476100e89d950e23/alert:5.609264024359E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473791752/a398a65c7de2d61b5f22de920ea6e06a/alert:5.6092639831483E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473791341/c4c557dc9e4fc03f28c8699fb931a677/alert:5.6092638537769E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473791379/6abec345df046e170da35f2680b0d031/alert:5.6092639005567E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473791268/baa9196b1b22a67b539071ca93467082/alert:5.6092638835305E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473790876/b978a18616709e5bb250c1ffeb6ec85b/alert:5.6092637262961E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473790578/e770173a96bf055194fbf013140a4c1a/alert:5.6092636180465E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473790113/cd15f731a4bcde6de0048d3631a7b0a8/alert:5.6092634330487E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473790301/4c057809a3799e02e922a0af06515877/alert:5.6092636101752E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473790238/b642e1aeeb010f58db18f7e151443683/alert:5.6092635741312E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473790128/40fbce0c77f010bd0ac96c410b3491c4/alert:5.6092634764364E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473790080/806136346cf81e94e5744aed2f33fd49/alert:5.6092634755227E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473789648/02566a5915a947639182e4b1d016dfef/alert:5.6092633491328E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473789698/c1ef110fc66f9a21b64d82e6642a6d71/alert:5.6092633549963E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473789731/b333259994327413b192628f2447eaf3/alert:5.6092633657683E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473789458/0588056ac3ad293235634dd00ee30e1c/alert:5.6092632820905E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473789176/c78768b97eb7ec734a3e99e13843eeb7/alert:5.6092631510817E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473789133/ffed102fea1d2d8f09fb22c7be064256/alert:5.6092631534309E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473789227/1ad330f9ccdaedb514bf072329602c83/alert:5.6092631998529E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473789230/b4cba7576044acec72c9378adfb55566/alert:5.6092631654212E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473789034/3fa2f21285c284b127e7bb6f84e61b36/alert:5.6092631316502E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473789078/d066d2647f1ee27f1b82d86e3d88c9c2/alert:5.6092631277896E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473788928/50cbf8d0536efdc03360f0a6fdff9881/alert:5.6092630811558E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473788993/d720024fb806985fe91b76b63b331fb7/alert:5.6092631081975E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473788807/3b3f9a84a2d533f9fe0856da4a8e27cc/alert:5.609263083515E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473788274/2991828c60490da315515fa4f76ad23e/alert:5.6092629460552E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473788011/aafe218f61e10b9ca13d0a2f5db21c6f/alert:5.6092629193018E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473787992/497ec5cdf2e9695306b6b19d1f3740c7/alert:5.6092628497844E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473787817/6d30f351fa64ab2a86a890617405dcfd/alert:5.609262805344E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473786954/1c1e43ae52188d2b29a7bbe439a44022/alert:5.6092625240028E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473787256/917ecff2f12979eebe5164ddd0ec6624/alert:5.6092626555347E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473786668/55202fc002ba31ed185e25bb110a86e8/alert:5.6092624719326E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473787224/e2ffb4d6e578cce8917855df6c03927a/alert:5.6092626404039E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473785875/6138df73830e14dd1c4b595786c249b0/alert:5.6092623347911E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473786035/b961c9121072bdea2306d5eaee5a3991/alert:5.6092623623243E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473786320/027aa302c31034a94269476c0ffead68/alert:5.609262438685E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473785424/a3bbf42143a9678d64b30a426950631d/alert:5.6092622536331E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473774168/89a5be69093bcebcc9fc78cce5f1435b/alert:5.6092594285998E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473762782/13a7fe0e96d19a93a3d9a295cb2eb24f/alert:5.6092563846205E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473749419/664639eb284b5f7a61a72ff1415894c5/alert:5.6092529577271E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473749241/81579c7455da4337533d50f514724df8/alert:5.6092529417389E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473747851/29113cb9c749a55b9502ddc71647ad36/alert:5.6092525995756E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473740488/d786d39145f299b868fa0c7e406e00cb/alert:5.6092506932196E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473733693/cba0f0a003e68b08d5e6bcbda0392228/alert:5.6092488435193E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473719617/e4a9e6d19f003e0be6ec06aef5b7bb1b/alert:5.609244552936E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473711423/a1a25cad289da6573fcf4e238276f609/alert:5.6092417081067E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473710672/d8632cd0f2221b9de0476a9d7bfb8710/alert:5.6092415177359E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473708741/201d12d0ec16411219855ad0589a1ff4/alert:5.6092410311274E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473700416/ef1081a5aa5ea31984ad9fda484423d4/alert:5.6092380152764E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473699051/96945eff6241a4b7e065f8f5f4bc40a9/alert:5.6092376472869E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473697732/cc31bf942c6e7f3b7820c08f9f3addc2/alert:5.6092371901249E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473693509/956955da5c68f9cd75501647619ff70d/alert:5.6092355971041E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473683662/6792833ec667357f201f09831549a885/alert:5.6092316700951E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473681914/42699db2f6b72840d27623ec77e3e9db/alert:5.6092311241506E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473677087/67bdc5518b9e7b260d854ec6291f60d8/alert:5.6092290476814E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473675768/df522c93f53a8d1c20ebbb8cad205bc2/alert:5.6092285361351E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473662569/478e0ad2dc967dd4858c63f63d1bd753/alert:5.6092230342208E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473647243/9b6d699fa52a8d28a547c7b49be7b8a7/alert:5.6092149925798E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473639362/fc5a853239e888798490cfeca55adb53/alert:5.6092130633424E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473637210/905713c111757aa17698824839340f1b/alert:5.6092125602488E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473631150/0108906ea506890b77375f9071088780/alert:5.6092110424189E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473624904/521a03efca4653135010e43975071b96/alert:5.6092095352139E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473595539/574ede76085fdcbd65bb967700060511/alert:5.6092022623764E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473594568/6062c9538305356bb370dedc56ca5a4b/alert:5.6092020460359E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473581082/00ae98abe1e1d11a95ec5a5cd44bd00f/alert:5.6091986857572E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473580358/673d3291b5b0ea78cbfee703150c90a1/alert:5.6091985106718E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473572273/6f9befc869533582a2484d1e4ec40c75/alert:5.6091964438693E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473564160/053461316a628003cbfb9a93c0bce7aa/alert:5.6091942280444E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473563041/df4d3ea886cc0591c1f52f102e575d43/alert:5.6091938336318E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473555820/3fb190a540c3adb3a22e58047afef4b2/alert:5.6091916377779E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473538184/e3b3c6b086eb2ba252b3346b16970e26/alert:5.6091827703742E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473537081/ef111702a1d28535dbea4597e8f57787/alert:5.6091817068538E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473536711/579a50a35c75931a61b6d40c56aa2363/alert:5.6091815730317E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473532881/b9167d61554cb5dc1077b1a824a5955b/alert:5.6091792613184E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473531720/753d747f94310c1f8a1dee301e9db89b/alert:5.6091789249758E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473525196/7a184834d0f31ec37d7af5c714a11928/alert:5.609176567744E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473518869/74459ed1253f574ec54ef33716f3be33/alert:5.6091744497746E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473509418/6e759df1af40d06eec7341591568f176/alert:5.6091707816043E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473508281/e5c47e707ab38438f1c32fff72730b59/alert:5.6091703617219E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473502345/df9efc73074521d6713cb4903deeb7bc/alert:5.6091678697588E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473493463/b3f66d1e793c84dff7d45df04bb30653/alert:5.6091644067897E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473487301/d310c0ce960ad8dfcb6f21734b5970ec/alert:5.6091622339133E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473471947/fbe975945709b4d3ac514ae9e8cf5830/alert:5.6091582263329E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473465630/f838b54aaba3ecbc1f8a9c2c0c02f9ba/alert:5.6091566567426E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473464465/74ef07433f279a6b50b8d7a44f75d2e5/alert:5.6091563304326E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473462761/2871dd0f2335e9ae26910ffeae8f1127/alert:5.6091559403672E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473456809/f9a0713961aadc071d95f0e4aa1a8387/alert:5.6091543814627E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473456297/069918867a4aa8d91603ed3487f96dac/alert:5.6091542558289E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473449799/f440d3296ca5e34e61341d3ab6183726/alert:5.6091526118588E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473433347/6e7d1b6bb94b631b784d3dc2fac66046/alert:5.6091484853587E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473429467/0624c8d094a9f68e13dd659dccef320d/alert:5.6091474112238E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473426767/6fb59baf0536127e68f2619fc2ba57f8/alert:5.6091467662955E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473420446/c16a235e3332daebb17baf0b0dcad581/alert:5.6091450632322E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473418635/ffb9c0c80e776beeb8270f2edcd05b41/alert:5.6091446583527E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473404515/0bedacf7f28fa4c6dc0574ee7d78350e/alert:5.6091409747341E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473403462/cc3948d34b9e60ad0e7c971822f7e5f4/alert:5.6091407140523E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473403207/42124899d80fd76dcb460e8889396f00/alert:5.6091406390465E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473391144/12b8e150532e457fa8d472b5b8e45a23/alert:5.6091373891226E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473380537/3af5d1452fe7d0bf2ac73a2cfdc17cf8/alert:5.6091345063202E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473371863/72bbafffcd88856b46c3468fae12311b/alert:5.6091314516429E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473356570/df00153829ed0c1a1a6800a2fa6389d5/alert:5.6091249552727E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473348069/2114d6c20cfb84f7633d6471a91aafff/alert:5.6091201451283E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473348162/c5b1692ac8a5130cf21fbb5d05345be7/alert:5.6091201369686E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473344731/897f794f4210ad491b087e6534b8cb6f/alert:5.6091183278381E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473338875/972d4b3b84bb8bc664993d9d3eb0bdc2/alert:5.6091158527853E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473335547/09d3cbe3e56c397b8b00f6b8f3e26999/alert:5.6091147176938E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473334672/99d8018334e887b811d351ca753c0602/alert:5.6091143075705E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473315711/f355c070de4cc4b361e68746e95a8136/alert:5.6091074214847E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473311342/01da09f4ba501589a3f46a6eb3157bda/alert:5.6091062447588E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473311749/222609349f7bafb5f3a98e3cc576a398/alert:5.6091063610969E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473304736/6e4c220b2d8695e2f804e208735b1b10/alert:5.609104517163E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473303981/a6c820c4c3df77e98b20c8bf12718f4c/alert:5.6091043638759E%2B20	
+https://site.geoedge.com/analyticsv2/ad/28473289223/df4c140b9635abc3c9d1ceb0fe0e5069/alert:5.609100177031E%2B20	Back Button Hijack 
+https://site.geoedge.com/analyticsv2/ad/28473288277/60db0c388cc2e80b678d1a9a8059ba37/alert:5.6090999479637E%2B20	Deceptive Site
+https://site.geoedge.com/analyticsv2/ad/28473286092/3ae7eeb20bdff16da6dae41761a8aa23/alert:5.6090994201506E%2B20	Back Button Hijack 
+https://site.geoedge.com/analyticsv2/ad/28473281593/eed0375aa9b4d2a00fed48ac8bcb3926/alert:5.6090983280076E%2B20	Back Button Hijack 
+https://site.geoedge.com/analyticsv2/ad/28473280445/e373f06333f313ef519960b7402c59a2/alert:5.6090980770854E%2B20	Deceptive Site
+https://site.geoedge.com/analyticsv2/ad/28473274656/5de5a4c8b0d6fc6aa5789ba4a392025a/alert:5.6090965867439E%2B20	Back Button Hijack 
+https://site.geoedge.com/analyticsv2/ad/28473273976/3bab8d8b0f8b203fccb39e3735d2920a/alert:5.6090964351338E%2B20	Deceptive Site
+https://site.geoedge.com/analyticsv2/ad/28473273162/7d8b8ffb063d9db78fcf5622b78a3506/alert:5.6090962420355E%2B20	Deceptive Site
+https://site.geoedge.com/analyticsv2/ad/28473267332/c4bdec62372c2f54896ebb9c98127691/alert:5.609094878296E%2B20	Deceptive Site

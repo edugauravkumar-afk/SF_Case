@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="UTF-8" />
+        <title>Malicious URL Post-Click → Salesforce Flow</title>
+</head>
+<body>
+<section style="font-family: Arial, sans-serif; line-height: 1.55;">
+    <h2 style="color:#0A4D8C;">Malicious URL Post‑Click → Salesforce Flow</h2>
+
+    <article style="margin-bottom:1.5rem;">
+        <h3 style="color:#0A4D8C;">Step 1. Fetch Alerts (main.py)</h3>
+        <ul style="margin:0 0 1rem 1.2rem;">
+            <li>Call GeoEdge history API for alert id <strong>1d148bdbb9e6b86b977fcb6a5d69f83a</strong>.</li>
+            <li>Paginate with retries/backoff and auto‑adjusted page size.</li>
+            <li>Default lookback is 24h (<code>--hours</code> overrides).</li>
+        </ul>
+    </article>
+
+    <article style="margin-bottom:1.5rem;">
+        <h3 style="color:#0A4D8C;">Step 2. Enrich Alerts (main.py)</h3>
+        <ul style="margin:0 0 1rem 1.2rem;">
+            <li>Join <code>project_id</code> → <code>campaign_id</code> → <code>account_id</code>/<code>account_name</code> using MySQL.</li>
+            <li>Populate campaign, publisher country, and account metadata.</li>
+            <li>Alerts without project metadata are excluded.</li>
+        </ul>
+    </article>
+
+    <article style="margin-bottom:1.5rem;">
+        <h3 style="color:#0A4D8C;">Step 3. Trigger Category Filter</h3>
+        <ul style="margin:0 0 1rem 1.2rem;">
+            <li>Filter to category <strong>Malicious URL Post‑Click</strong> using <code>trigger_type_name</code> or <code>trigger_metadata</code>.</li>
+            <li>All trigger keywords under this category are preserved for grouping.</li>
+        </ul>
+    </article>
+
+    <article style="margin-bottom:1.5rem;">
+        <h3 style="color:#0A4D8C;">Step 4. Case Plan Grouping</h3>
+        <ul style="margin:0 0 1rem 1.2rem;">
+            <li><strong>Per‑account MC cases:</strong> if trigger keyword = “Malicious Cloaking”.</li>
+            <li><strong>Bulk cases:</strong> all other trigger keywords grouped by <code>trigger_metadata</code>.</li>
+            <li>Optional focus: <code>--only-trigger "Malicious URL Post‑Click"</code>.</li>
+            <li>Optional summary: <code>--trigger-summary</code> shows accounts per trigger.</li>
+        </ul>
+    </article>
+
+    <article style="margin-bottom:1.5rem;">
+        <h3 style="color:#0A4D8C;">Step 5. Output</h3>
+        <ul style="margin:0 0 1rem 1.2rem;">
+            <li><code>--json</code> emits full case plan payload.</li>
+            <li>Default output is a readable summary.</li>
+        </ul>
+    </article>
+
+    <article style="margin-bottom:1.5rem;">
+        <h3 style="color:#0A4D8C;">Step 6. Salesforce Cases (case_creator.py)</h3>
+        <ul style="margin:0 0 1rem 1.2rem;">
+            <li>Loads case plan from <code>latest_case_plan.json</code>.</li>
+            <li>Builds subject + description and posts to Salesforce (Workato endpoint).</li>
+            <li><code>--dry-run</code> builds payloads without creating cases.</li>
+        </ul>
+    </article>
+</section>
+</body>
+</html>
