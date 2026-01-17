@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import os
 import sys
@@ -10,14 +9,13 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable, List, Optional, Sequence
+from typing import Any, Optional, Sequence
 
 import mysql.connector
 import requests
 import vertica_python
 from dotenv import load_dotenv
 from mysql.connector.connection import MySQLConnection
-from mysql.connector.cursor import MySQLCursor
 
 # ---------------------------------------------------------------------------
 # Environment & logging setup

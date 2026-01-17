@@ -1,3 +1,5 @@
 python-dotenv
 PyMySQL
 requests
+mysql-connector-python
+vertica-python
