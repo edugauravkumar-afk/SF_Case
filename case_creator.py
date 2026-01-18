@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import sys
@@ -228,10 +229,23 @@ class CaseDataAccessor:
 # Case plan loader (from main.py output)
 # ---------------------------------------------------------------------------
 class CasePlanIndex:
+    @staticmethod
+    def _has_cloaking_alerts(alerts: Sequence[dict[str, Any]]) -> bool:
+        for alert in alerts:
+            candidate = (
+                (alert.get("trigger_metadata") or "").strip()
+                or (alert.get("alert_name") or "").strip()
+                or ""
+            )
+            if "cloaking" in candidate.lower():
+                return True
+        return False
+
     def __init__(self, plan_path: Optional[Path]) -> None:
         self._plan_path = plan_path
         self._accounts: dict[str, dict[str, Any]] = {}
         self._bulk_triggers: dict[str, dict[str, Any]] = {}
+        self._mc_account_ids: list[int] = []
         if plan_path is not None:
             self._load(plan_path)
 
@@ -263,9 +277,16 @@ class CasePlanIndex:
     def _index_plan(self, plan: dict[str, Any]) -> None:
         accounts: dict[str, dict[str, Any]] = {}
         bulk_triggers: dict[str, dict[str, Any]] = {}
+        mc_account_ids: list[int] = []
         for case in plan.get("malicious_cloaking_cases", []):
             account_id = str(case.get("account_id"))
             accounts[account_id] = case
+            alerts = case.get("alerts", []) or []
+            if self._has_cloaking_alerts(alerts):
+                try:
+                    mc_account_ids.append(int(account_id))
+                except (TypeError, ValueError):
+                    continue
         for trigger_case in plan.get("bulk_trigger_cases", []):
             trigger_name = str(trigger_case.get("trigger", "")).strip()
             if trigger_name:
@@ -275,6 +296,7 @@ class CasePlanIndex:
                 accounts[account_id] = account
         self._accounts = accounts
         self._bulk_triggers = bulk_triggers
+        self._mc_account_ids = sorted(set(mc_account_ids))
         LOGGER.info("Loaded %s accounts from case plan", len(self._accounts))
 
     def get_account(self, publisher_id: int) -> Optional[dict[str, Any]]:
@@ -299,6 +321,12 @@ class CasePlanIndex:
                 continue
         return sorted(set(ids))
 
+    def list_malicious_account_ids(self) -> list[int]:
+        return list(self._mc_account_ids)
+
+    def is_malicious_account_id(self, publisher_id: int) -> bool:
+        return publisher_id in set(self._mc_account_ids)
+
 
 # ---------------------------------------------------------------------------
 # Case payload + posting
@@ -321,6 +349,18 @@ class CaseBuilder:
     def __init__(self, accessor: CaseDataAccessor, plan_index: Optional[CasePlanIndex] = None) -> None:
         self._accessor = accessor
         self._plan_index = plan_index
+
+    @staticmethod
+    def _has_cloaking_alerts(alerts: Sequence[dict[str, Any]]) -> bool:
+        for alert in alerts:
+            candidate = (
+                (alert.get("trigger_metadata") or "").strip()
+                or (alert.get("alert_name") or "").strip()
+                or ""
+            )
+            if "cloaking" in candidate.lower():
+                return True
+        return False
 
     @staticmethod
     def _render_pipe_table(headers: list[str], rows: list[list[str]]) -> list[str]:
@@ -469,7 +509,7 @@ class CaseBuilder:
         total = len(batches)
         payloads: list[CasePayload] = []
         for idx, batch in enumerate(batches, start=1):
-            part_label = f"Part {idx}/{total}" if total > 1 else None
+            part_label = f"{idx}/{total}" if total > 1 else None
             payloads.append(self._build_bulk_payload(trigger_name, batch, part_label=part_label))
         return payloads
 
@@ -477,13 +517,21 @@ class CaseBuilder:
         payloads = self.build_bulk_trigger_cases(trigger_name, max_accounts=max_accounts)
         return payloads[0] if payloads else None
 
-    def build(self, publisher_id: int) -> Optional[CasePayload]:
+    def build(self, publisher_id: int, allow_non_cloaking: bool = False) -> Optional[CasePayload]:
         core = self._accessor.fetch_core(publisher_id)
         ge_scanned, project_ids = self._accessor.fetch_projects((core or {}).get("campaign_id"))
         ge_detected = self._accessor.alerts_exist(project_ids)
         spend = self._accessor.total_spent(publisher_id)
 
         plan_entry = self._plan_index.get_account(publisher_id) if self._plan_index else None
+        plan_alerts = plan_entry.get("alerts", []) if plan_entry else []
+        is_malicious_case = bool(plan_entry and self._has_cloaking_alerts(plan_alerts))
+        if plan_entry and self._plan_index and not is_malicious_case and not allow_non_cloaking:
+            LOGGER.info(
+                "Skipping single-case build for publisher %s (no cloaking alerts in plan entry; use bulk cases)",
+                publisher_id,
+            )
+            return None
         account_name = (core or {}).get("name") or "Unknown account"
         campaign_id = (core or {}).get("campaign_id")
         subject = self._build_subject(publisher_id, account_name, campaign_id, plan_entry)
@@ -503,15 +551,20 @@ class CaseBuilder:
         # Extract trigger details and campaign IDs from plan if available
         if plan_entry:
             alerts = plan_entry.get("alerts", []) or []
-            trigger_detail = (
-                (alerts[0].get("trigger_metadata") or "").strip()
-                or (alerts[0].get("alert_name") or "").strip()
-                or "Malicious URL Post-Click"
-            ) if alerts else "Malicious URL Post-Click"
+            if is_malicious_case:
+                trigger_detail = "Malicious Cloaking"
+            else:
+                trigger_detail = (
+                    (alerts[0].get("trigger_metadata") or "").strip()
+                    or (alerts[0].get("alert_name") or "").strip()
+                    or "Malicious URL Post-Click"
+                ) if alerts else "Malicious URL Post-Click"
             
             # Get all campaign IDs from plan
             campaign_ids_list = plan_entry.get("campaign_ids") or []
-            campaign_ids_str = ", ".join(str(cid) for cid in campaign_ids_list if cid) or str(campaign_id) if campaign_id else None
+            campaign_ids_str = ", ".join(str(cid) for cid in campaign_ids_list if cid)
+            if not campaign_ids_str:
+                campaign_ids_str = str(campaign_id) if campaign_id else "Unknown"
             
             # Set GE flags to Yes when using plan data
             ge_detected = "Yes"
@@ -623,11 +676,25 @@ class CaseBuilder:
         trigger_category = (
             alerts[0].get("trigger_type_name", "Malicious URL Post-Click") if alerts else "Malicious URL Post-Click"
         )
-        trigger_detail = (
-            (alerts[0].get("trigger_metadata") or "").strip()
-            or (alerts[0].get("alert_name") or "").strip()
-            or trigger_category
-        )
+        trigger_detail = ""
+        for alert in alerts:
+            candidate = (
+                (alert.get("trigger_metadata") or "").strip()
+                or (alert.get("alert_name") or "").strip()
+                or ""
+            )
+            if "cloaking" in candidate.lower():
+                trigger_detail = candidate
+                break
+        if not trigger_detail:
+            if self._has_cloaking_alerts(alerts):
+                trigger_detail = "Malicious Cloaking"
+            else:
+                trigger_detail = (
+                    (alerts[0].get("trigger_metadata") or "").strip()
+                    or (alerts[0].get("alert_name") or "").strip()
+                    or trigger_category
+                )
 
         latest_per_campaign: dict[str, dict[str, Any]] = {}
         for alert in alerts:
@@ -661,6 +728,30 @@ class CaseBuilder:
             "Alert URLs (latest per campaign):",
         ]
         lines.extend(bullet_lines)
+
+        other_triggers = plan_entry.get("other_triggers") or []
+        other_activity = plan_entry.get("other_activity") or []
+        if other_triggers or other_activity:
+            lines.append("")
+            if other_triggers:
+                other_list = ", ".join(str(item) for item in other_triggers if item) or "Unknown"
+                lines.append(f"Other Triggers: {other_list}")
+            if other_activity:
+                for entry in other_activity:
+                    trigger = entry.get("trigger") or "Unknown"
+                    alerts = entry.get("alerts") or []
+                    lines.append(f"{trigger}:")
+                    latest_per_campaign: dict[str, str] = {}
+                    for alert in alerts:
+                        campaign_id = str(alert.get("campaign_id", "Unknown"))
+                        url = alert.get("alert_details_url") or "Unavailable"
+                        if campaign_id not in latest_per_campaign:
+                            latest_per_campaign[campaign_id] = url
+                    if not latest_per_campaign:
+                        lines.append("  • No alert URLs captured")
+                        continue
+                    for cid in sorted(latest_per_campaign):
+                        lines.append(f"  • Campaign {cid}: {latest_per_campaign[cid]}")
         return "\n".join(lines)
 
 
@@ -742,6 +833,22 @@ class CaseRunner:
                 time.sleep(self._batch_sleep)
         return results
 
+    def close(self, publisher_ids: Sequence[int], status: str) -> list[CaseResult]:
+        results: list[CaseResult] = []
+        for idx, pub_id in enumerate(publisher_ids, start=1):
+            LOGGER.info("Closing case for publisher %s (%s/%s)", pub_id, idx, len(publisher_ids))
+            payload = self._builder.build(pub_id, allow_non_cloaking=True)
+            if payload is None:
+                results.append(CaseResult(pub_id, False, error="Skipped"))
+                continue
+            payload.payload["status"] = status
+            result = self._poster.post(payload)
+            results.append(result)
+            if self._batch_sleep and idx < len(publisher_ids):
+                LOGGER.debug("Sleeping %.1fs between publishers", self._batch_sleep)
+                time.sleep(self._batch_sleep)
+        return results
+
     def run_bulk_trigger(
         self,
         trigger_name: str,
@@ -762,6 +869,28 @@ class CaseRunner:
             results.append(self._poster.post(payload))
         return results
 
+    def close_bulk_trigger(
+        self,
+        trigger_name: str,
+        status: str,
+        max_accounts: Optional[int] = None,
+        max_accounts_per_case: Optional[int] = None,
+        max_campaign_ids_len: Optional[int] = None,
+    ) -> list[CaseResult]:
+        payloads = self._builder.build_bulk_trigger_cases(
+            trigger_name,
+            max_accounts=max_accounts,
+            max_accounts_per_case=max_accounts_per_case,
+            max_campaign_ids_len=max_campaign_ids_len,
+        )
+        if not payloads:
+            return [CaseResult(0, False, error=f"No bulk trigger case found for '{trigger_name}'")]
+        results: list[CaseResult] = []
+        for payload in payloads:
+            payload.payload["status"] = status
+            results.append(self._poster.post(payload))
+        return results
+
 
 # ---------------------------------------------------------------------------
 # CLI utilities
@@ -770,11 +899,11 @@ def _parse_publisher_ids(args: argparse.Namespace, plan_index: Optional[CasePlan
     if args.from_plan:
         if plan_index is None:
             raise ValueError("--from-plan requires a valid --case-plan file")
-        ids = plan_index.list_account_ids()
+        ids = plan_index.list_malicious_account_ids()
         if args.max_from_plan is not None:
             ids = ids[: args.max_from_plan]
         if not ids:
-            raise ValueError("No publisher IDs found in case plan")
+            raise ValueError("No malicious cloaking publisher IDs found in case plan")
         return ids
     if args.publisher_ids:
         return [int(pid.strip()) for pid in args.publisher_ids]
@@ -799,6 +928,16 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--publisher-file", help="Path to file containing publisher IDs (one per line)")
     parser.add_argument("--dry-run", action="store_true", help="Build payloads but do not call Salesforce")
     parser.add_argument("--batch-sleep", type=float, default=BATCH_SLEEP, help="Seconds to sleep between publishers")
+    parser.add_argument(
+        "--close",
+        action="store_true",
+        help="Close cases instead of creating them (uses the same Workato endpoint).",
+    )
+    parser.add_argument(
+        "--close-status",
+        default="Closed",
+        help="Status value to set when closing cases (default: Closed).",
+    )
     parser.add_argument(
         "--from-plan",
         action="store_true",
@@ -853,15 +992,48 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     try:
         if args.bulk_trigger:
             publisher_ids = []
-            results = runner.run_bulk_trigger(
-                args.bulk_trigger,
-                max_accounts=args.bulk_max_accounts,
-                max_accounts_per_case=args.bulk_batch_size,
-                max_campaign_ids_len=args.bulk_max_campaign_ids_len,
-            )
+            if args.close:
+                results = runner.close_bulk_trigger(
+                    args.bulk_trigger,
+                    status=args.close_status,
+                    max_accounts=args.bulk_max_accounts,
+                    max_accounts_per_case=args.bulk_batch_size,
+                    max_campaign_ids_len=args.bulk_max_campaign_ids_len,
+                )
+            else:
+                results = runner.run_bulk_trigger(
+                    args.bulk_trigger,
+                    max_accounts=args.bulk_max_accounts,
+                    max_accounts_per_case=args.bulk_batch_size,
+                    max_campaign_ids_len=args.bulk_max_campaign_ids_len,
+                )
         else:
             publisher_ids = _parse_publisher_ids(args, plan_index)
-            results = runner.run(publisher_ids)
+            if args.close:
+                results = runner.close(publisher_ids, status=args.close_status)
+            else:
+                results = runner.run(publisher_ids)
+            if args.from_plan:
+                for trigger in plan_index.list_bulk_triggers():
+                    if args.close:
+                        results.extend(
+                            runner.close_bulk_trigger(
+                                trigger,
+                                status=args.close_status,
+                                max_accounts=args.bulk_max_accounts,
+                                max_accounts_per_case=args.bulk_batch_size,
+                                max_campaign_ids_len=args.bulk_max_campaign_ids_len,
+                            )
+                        )
+                    else:
+                        results.extend(
+                            runner.run_bulk_trigger(
+                                trigger,
+                                max_accounts=args.bulk_max_accounts,
+                                max_accounts_per_case=args.bulk_batch_size,
+                                max_campaign_ids_len=args.bulk_max_campaign_ids_len,
+                            )
+                        )
     finally:
         db_client.close()
 

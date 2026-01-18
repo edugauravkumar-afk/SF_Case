@@ -384,7 +384,7 @@ def _normalize_trigger_detail(alert: Dict[str, Any]) -> str:
 
 
 def _is_malicious_cloaking(trigger_detail: str) -> bool:
-    return trigger_detail.lower() == "malicious cloaking"
+    return "cloaking" in trigger_detail.lower()
 
 
 def _summarize_alert(alert: Dict[str, Any]) -> Dict[str, Any]:
