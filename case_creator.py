@@ -69,6 +69,7 @@ VERTICA_CFG = {
 SF_CASE_URL = _env_or_fail("SF_CASE_URL")
 SF_API_TOKEN = _env_or_fail("SF_API_TOKEN")
 GEOEDGE_API_KEY = _env_or_fail("GEOEDGE_API_KEY")
+SF_OWNER_ID = _env_or_default("SF_OWNER_ID", "0050V000007mBZkQAM")
 
 MAX_CASE_RETRIES = int(_env_or_default("CASE_MAX_RETRIES", "4"))
 INITIAL_BACKOFF = float(_env_or_default("CASE_INITIAL_BACKOFF", "5"))
@@ -76,6 +77,7 @@ BATCH_SLEEP = float(_env_or_default("CASE_BATCH_SLEEP", "0"))
 CASE_PLAN_PATH = Path(_env_or_default("CASE_PLAN_PATH", "latest_case_plan.json"))
 BULK_MAX_ACCOUNTS_PER_CASE = int(_env_or_default("BULK_MAX_ACCOUNTS_PER_CASE", "5"))
 BULK_MAX_CAMPAIGN_IDS_LEN = int(_env_or_default("BULK_MAX_CAMPAIGN_IDS_LEN", "240"))
+DEBUG_CASE_PAYLOAD = _env_or_default("DEBUG_CASE_PAYLOAD", "0").lower() in {"1", "true", "yes"}
 
 # ---------------------------------------------------------------------------
 # Database helpers
@@ -449,7 +451,6 @@ class CaseBuilder:
             "request_for": trigger_detail,
             "backstage_account_id": str(publisher_id),
             "flag_origin": "GeoEdge",
-            "owner_id": "0050V000007mBZkQAM",
             "subject": subject,
             "description": "\n".join(description_lines),
             "status": "New",
@@ -458,6 +459,8 @@ class CaseBuilder:
             "ge_detected": "Yes",
             "ge_scanned": "Yes",
         }
+        if SF_OWNER_ID:
+            payload["owner_id"] = SF_OWNER_ID
         return CasePayload(publisher_id=publisher_id, payload=payload)
 
     def build_bulk_trigger_cases(
@@ -579,7 +582,6 @@ class CaseBuilder:
             "request_for": trigger_detail,
             "backstage_account_id": str(publisher_id),
             "flag_origin": "GeoEdge",
-            "owner_id": "0050V000007mBZkQAM",
             "subject": subject,
             "description": description,
             "status": "New",
@@ -588,6 +590,8 @@ class CaseBuilder:
             "ge_detected": ge_detected,
             "ge_scanned": ge_scanned,
         }
+        if SF_OWNER_ID:
+            payload["owner_id"] = SF_OWNER_ID
         return CasePayload(publisher_id=publisher_id, payload=payload)
 
     @staticmethod
@@ -768,6 +772,9 @@ class CasePoster:
 
         backoff = INITIAL_BACKOFF
         for attempt in range(1, MAX_CASE_RETRIES + 1):
+            if DEBUG_CASE_PAYLOAD:
+                payload_dump = json.dumps(case_payload.payload, ensure_ascii=False, default=str)
+                LOGGER.info("Posting case payload for %s: %s", case_payload.publisher_id, payload_dump)
             response = self._session.post(SF_CASE_URL, json=case_payload.payload, timeout=30)
             status = response.status_code
             try:
