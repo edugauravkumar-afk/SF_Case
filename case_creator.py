@@ -8,7 +8,7 @@ import os
 import sys
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
@@ -78,6 +78,7 @@ CASE_PLAN_PATH = Path(_env_or_default("CASE_PLAN_PATH", "latest_case_plan.json")
 BULK_MAX_ACCOUNTS_PER_CASE = int(_env_or_default("BULK_MAX_ACCOUNTS_PER_CASE", "5"))
 BULK_MAX_CAMPAIGN_IDS_LEN = int(_env_or_default("BULK_MAX_CAMPAIGN_IDS_LEN", "240"))
 DEBUG_CASE_PAYLOAD = _env_or_default("DEBUG_CASE_PAYLOAD", "0").lower() in {"1", "true", "yes"}
+PROGRESS_FILE_DEFAULT = _env_or_default("CASE_PROGRESS_FILE", "case_creation_progress.jsonl")
 
 # ---------------------------------------------------------------------------
 # Database helpers
@@ -247,6 +248,8 @@ class CasePlanIndex:
         self._plan_path = plan_path
         self._accounts: dict[str, dict[str, Any]] = {}
         self._bulk_triggers: dict[str, dict[str, Any]] = {}
+        self._account_triggers: dict[str, set[str]] = {}
+        self._account_trigger_alerts: dict[str, dict[str, list[dict[str, Any]]]] = {}
         self._mc_account_ids: list[int] = []
         if plan_path is not None:
             self._load(plan_path)
@@ -279,6 +282,8 @@ class CasePlanIndex:
     def _index_plan(self, plan: dict[str, Any]) -> None:
         accounts: dict[str, dict[str, Any]] = {}
         bulk_triggers: dict[str, dict[str, Any]] = {}
+        account_triggers: dict[str, set[str]] = {}
+        account_trigger_alerts: dict[str, dict[str, list[dict[str, Any]]]] = {}
         mc_account_ids: list[int] = []
         for case in plan.get("malicious_cloaking_cases", []):
             account_id = str(case.get("account_id"))
@@ -295,9 +300,19 @@ class CasePlanIndex:
                 bulk_triggers[trigger_name] = trigger_case
             for account in trigger_case.get("accounts", []):
                 account_id = str(account.get("account_id"))
+                if trigger_name:
+                    account_triggers.setdefault(account_id, set()).add(trigger_name)
+                    account_trigger_alerts.setdefault(account_id, {}).setdefault(
+                        trigger_name, account.get("alerts", []) or []
+                    )
+                existing = accounts.get(account_id)
+                if existing and self._has_cloaking_alerts(existing.get("alerts", []) or []):
+                    continue
                 accounts[account_id] = account
         self._accounts = accounts
         self._bulk_triggers = bulk_triggers
+        self._account_triggers = account_triggers
+        self._account_trigger_alerts = account_trigger_alerts
         self._mc_account_ids = sorted(set(mc_account_ids))
         LOGGER.info("Loaded %s accounts from case plan", len(self._accounts))
 
@@ -310,6 +325,16 @@ class CasePlanIndex:
         if not self._bulk_triggers:
             return None
         return self._bulk_triggers.get(trigger_name)
+
+    def get_account_triggers(self, publisher_id: int) -> list[str]:
+        if not self._account_triggers:
+            return []
+        return sorted(self._account_triggers.get(str(publisher_id), set()))
+
+    def get_account_trigger_alerts(self, publisher_id: int, trigger_name: str) -> list[dict[str, Any]]:
+        if not self._account_trigger_alerts:
+            return []
+        return list(self._account_trigger_alerts.get(str(publisher_id), {}).get(trigger_name, []))
 
     def list_bulk_triggers(self) -> list[str]:
         return sorted(self._bulk_triggers.keys())
@@ -345,6 +370,50 @@ class CaseResult:
     success: bool
     response: Optional[dict[str, Any]] = None
     error: Optional[str] = None
+
+
+class ProgressTracker:
+    def __init__(self, path: Path) -> None:
+        self._path = path
+        self._seen: dict[str, bool] = {}
+        self._load()
+
+    def _load(self) -> None:
+        if not self._path.exists():
+            return
+        try:
+            with self._path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    key = entry.get("key")
+                    if key:
+                        self._seen[str(key)] = bool(entry.get("success"))
+        except OSError:
+            return
+
+    def has(self, key: str) -> bool:
+        return bool(self._seen.get(key))
+
+    def record(self, key: str, result: CaseResult) -> None:
+        payload = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "key": key,
+            "publisher_id": result.publisher_id,
+            "success": result.success,
+            "error": result.error,
+        }
+        try:
+            with self._path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        except OSError:
+            return
+        self._seen[key] = result.success
 
 
 class CaseBuilder:
@@ -424,6 +493,28 @@ class CaseBuilder:
 
             entry_lines.append(f"{idx}. Account ID: {account_id}")
             entry_lines.append(f"   Name:       {account_name}")
+            if self._plan_index:
+                triggers = self._plan_index.get_account_triggers(int(account_id))
+                other_triggers = [t for t in triggers if t and t != trigger_name]
+                if other_triggers:
+                    entry_lines.append(f"   Other Triggers: {', '.join(other_triggers)}")
+                    for other_trigger in other_triggers:
+                        alerts = self._plan_index.get_account_trigger_alerts(int(account_id), other_trigger)
+                        other_latest_per_campaign: dict[str, str] = {}
+                        for alert in alerts:
+                            campaign_id = str(alert.get("campaign_id", "Unknown"))
+                            url = alert.get("alert_details_url") or "Unavailable"
+                            if campaign_id not in other_latest_per_campaign:
+                                other_latest_per_campaign[campaign_id] = url
+                        if not other_latest_per_campaign:
+                            entry_lines.append(f"   Alerts ({other_trigger}):")
+                            entry_lines.append("     • No alert URLs captured")
+                            continue
+                        entry_lines.append(f"   Alerts ({other_trigger}):")
+                        for cid in sorted(other_latest_per_campaign):
+                            entry_lines.append(
+                                f"     • Campaign {cid}: {other_latest_per_campaign[cid]}"
+                            )
 
             if not latest_per_campaign:
                 entry_lines.append("   Campaign:   Unknown")
@@ -431,7 +522,7 @@ class CaseBuilder:
                 entry_lines.append("")
                 continue
 
-            entry_lines.append("   Alerts:")
+            entry_lines.append(f"   Alerts ({trigger_name}):")
             for cid in sorted(latest_per_campaign):
                 url = latest_per_campaign[cid]["url"] or "Unavailable"
                 entry_lines.append(f"     - Campaign {cid}: {url}")
@@ -441,7 +532,7 @@ class CaseBuilder:
             entry_lines.pop()
         description_lines.extend(entry_lines)
 
-        subject = f"Malicious URL Post-Click Alerts : {trigger_name}"
+        subject = trigger_name
         if part_label:
             subject = f"{subject} ({part_label})"
 
@@ -820,21 +911,40 @@ class CasePoster:
 # Batch runner
 # ---------------------------------------------------------------------------
 class CaseRunner:
-    def __init__(self, builder: CaseBuilder, poster: CasePoster, batch_sleep: float = 0) -> None:
+    def __init__(
+        self,
+        builder: CaseBuilder,
+        poster: CasePoster,
+        batch_sleep: float = 0,
+        progress: Optional[ProgressTracker] = None,
+        resume: bool = False,
+    ) -> None:
         self._builder = builder
         self._poster = poster
         self._batch_sleep = batch_sleep
+        self._progress = progress
+        self._resume = resume
 
     def run(self, publisher_ids: Sequence[int]) -> list[CaseResult]:
         results: list[CaseResult] = []
         for idx, pub_id in enumerate(publisher_ids, start=1):
+            progress_key = f"publisher:{pub_id}"
+            if self._resume and self._progress and self._progress.has(progress_key):
+                LOGGER.info("Skipping publisher %s (already recorded in progress)", pub_id)
+                results.append(CaseResult(pub_id, False, error="Skipped (resume)"))
+                continue
             LOGGER.info("Processing publisher %s (%s/%s)", pub_id, idx, len(publisher_ids))
             payload = self._builder.build(pub_id)
             if payload is None:
-                results.append(CaseResult(pub_id, False, error="Skipped"))
+                result = CaseResult(pub_id, False, error="Skipped")
+                results.append(result)
+                if self._progress:
+                    self._progress.record(progress_key, result)
                 continue
             result = self._poster.post(payload)
             results.append(result)
+            if self._progress:
+                self._progress.record(progress_key, result)
             if self._batch_sleep and idx < len(publisher_ids):
                 LOGGER.debug("Sleeping %.1fs between publishers", self._batch_sleep)
                 time.sleep(self._batch_sleep)
@@ -843,14 +953,24 @@ class CaseRunner:
     def close(self, publisher_ids: Sequence[int], status: str) -> list[CaseResult]:
         results: list[CaseResult] = []
         for idx, pub_id in enumerate(publisher_ids, start=1):
+            progress_key = f"close:{pub_id}"
+            if self._resume and self._progress and self._progress.has(progress_key):
+                LOGGER.info("Skipping publisher %s (already recorded in progress)", pub_id)
+                results.append(CaseResult(pub_id, False, error="Skipped (resume)"))
+                continue
             LOGGER.info("Closing case for publisher %s (%s/%s)", pub_id, idx, len(publisher_ids))
             payload = self._builder.build(pub_id, allow_non_cloaking=True)
             if payload is None:
-                results.append(CaseResult(pub_id, False, error="Skipped"))
+                result = CaseResult(pub_id, False, error="Skipped")
+                results.append(result)
+                if self._progress:
+                    self._progress.record(progress_key, result)
                 continue
             payload.payload["status"] = status
             result = self._poster.post(payload)
             results.append(result)
+            if self._progress:
+                self._progress.record(progress_key, result)
             if self._batch_sleep and idx < len(publisher_ids):
                 LOGGER.debug("Sleeping %.1fs between publishers", self._batch_sleep)
                 time.sleep(self._batch_sleep)
@@ -863,6 +983,10 @@ class CaseRunner:
         max_accounts_per_case: Optional[int] = None,
         max_campaign_ids_len: Optional[int] = None,
     ) -> list[CaseResult]:
+        progress_key = f"bulk:{trigger_name}"
+        if self._resume and self._progress and self._progress.has(progress_key):
+            LOGGER.info("Skipping bulk trigger %s (already recorded in progress)", trigger_name)
+            return [CaseResult(0, False, error="Skipped (resume)")]
         payloads = self._builder.build_bulk_trigger_cases(
             trigger_name,
             max_accounts=max_accounts,
@@ -874,6 +998,8 @@ class CaseRunner:
         results: list[CaseResult] = []
         for payload in payloads:
             results.append(self._poster.post(payload))
+        if self._progress:
+            self._progress.record(progress_key, CaseResult(0, all(r.success for r in results)))
         return results
 
     def close_bulk_trigger(
@@ -884,6 +1010,10 @@ class CaseRunner:
         max_accounts_per_case: Optional[int] = None,
         max_campaign_ids_len: Optional[int] = None,
     ) -> list[CaseResult]:
+        progress_key = f"bulk_close:{trigger_name}"
+        if self._resume and self._progress and self._progress.has(progress_key):
+            LOGGER.info("Skipping bulk trigger %s (already recorded in progress)", trigger_name)
+            return [CaseResult(0, False, error="Skipped (resume)")]
         payloads = self._builder.build_bulk_trigger_cases(
             trigger_name,
             max_accounts=max_accounts,
@@ -896,6 +1026,8 @@ class CaseRunner:
         for payload in payloads:
             payload.payload["status"] = status
             results.append(self._poster.post(payload))
+        if self._progress:
+            self._progress.record(progress_key, CaseResult(0, all(r.success for r in results)))
         return results
 
 
@@ -979,6 +1111,16 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         type=int,
         help="Max length for campaign_ids field before splitting (defaults to env BULK_MAX_CAMPAIGN_IDS_LEN).",
     )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume from last run using progress file (skips already processed items).",
+    )
+    parser.add_argument(
+        "--progress-file",
+        default=PROGRESS_FILE_DEFAULT,
+        help="Path to progress file for resume support (default: case_creation_progress.jsonl).",
+    )
     return parser.parse_args(argv)
 
 
@@ -994,7 +1136,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     plan_index = CasePlanIndex(plan_path)
     builder = CaseBuilder(accessor, plan_index=plan_index)
     poster = CasePoster(dry_run=args.dry_run)
-    runner = CaseRunner(builder, poster, batch_sleep=args.batch_sleep)
+    progress = ProgressTracker(Path(args.progress_file)) if args.progress_file else None
+    runner = CaseRunner(builder, poster, batch_sleep=args.batch_sleep, progress=progress, resume=args.resume)
 
     try:
         if args.bulk_trigger:

@@ -5,3 +5,5 @@ __pycache__/
 *.pyo
 *.log
 .DS_Store
+latest_case_plan.json
+case_creation_progress.jsonl
