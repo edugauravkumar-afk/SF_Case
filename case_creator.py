@@ -79,6 +79,8 @@ BULK_MAX_ACCOUNTS_PER_CASE = int(_env_or_default("BULK_MAX_ACCOUNTS_PER_CASE", "
 BULK_MAX_CAMPAIGN_IDS_LEN = int(_env_or_default("BULK_MAX_CAMPAIGN_IDS_LEN", "240"))
 DEBUG_CASE_PAYLOAD = _env_or_default("DEBUG_CASE_PAYLOAD", "0").lower() in {"1", "true", "yes"}
 PROGRESS_FILE_DEFAULT = _env_or_default("CASE_PROGRESS_FILE", "case_creation_progress.jsonl")
+CASE_IDEMPOTENCY_FIELD = _env_or_default("CASE_IDEMPOTENCY_FIELD", "idempotency_key")
+CASE_IDEMPOTENCY_PREFIX = _env_or_default("CASE_IDEMPOTENCY_PREFIX", "geoedge")
 
 # ---------------------------------------------------------------------------
 # Database helpers
@@ -177,6 +179,7 @@ class CaseDataAccessor:
         self._db = db
         self._http_session = requests.Session()
         self._http_session.headers.update({"Authorization": GEOEDGE_API_KEY})
+        self._publisher_status_cache: dict[int, Optional[str]] = {}
 
     def is_tier3(self, publisher_id: int) -> bool:
         rows = self._db.vertica_query(
@@ -227,6 +230,36 @@ class CaseDataAccessor:
         rows = self._db.vertica_query(SPEND_SQL, (publisher_id,))
         return rows[0][0] if rows else None
 
+    def fetch_publisher_status(self, publisher_id: int) -> Optional[str]:
+        if publisher_id in self._publisher_status_cache:
+            return self._publisher_status_cache[publisher_id]
+        self.fetch_publisher_statuses([publisher_id])
+        return self._publisher_status_cache.get(publisher_id)
+
+    def fetch_publisher_statuses(self, publisher_ids: Sequence[int]) -> dict[int, Optional[str]]:
+        ids = [int(pid) for pid in publisher_ids if isinstance(pid, int) or str(pid).isdigit()]
+        ids = [pid for pid in ids if pid not in self._publisher_status_cache]
+        if not ids:
+            return self._publisher_status_cache
+
+        chunk_size = 500
+        for idx in range(0, len(ids), chunk_size):
+            chunk = ids[idx : idx + chunk_size]
+            placeholders = ",".join(["%s"] * len(chunk))
+            rows = self._db.mysql_query(
+                f"SELECT id, status FROM trc.publishers WHERE id IN ({placeholders})",
+                tuple(chunk),
+            )
+            for row in rows:
+                try:
+                    pid = int(row[0])
+                except (TypeError, ValueError):
+                    continue
+                self._publisher_status_cache[pid] = str(row[1]).strip().upper() if row[1] is not None else None
+            for pid in chunk:
+                self._publisher_status_cache.setdefault(pid, None)
+        return self._publisher_status_cache
+
 
 # ---------------------------------------------------------------------------
 # Case plan loader (from main.py output)
@@ -251,6 +284,7 @@ class CasePlanIndex:
         self._account_triggers: dict[str, set[str]] = {}
         self._account_trigger_alerts: dict[str, dict[str, list[dict[str, Any]]]] = {}
         self._mc_account_ids: list[int] = []
+        self._plan_id: str = "unknown"
         if plan_path is not None:
             self._load(plan_path)
 
@@ -285,6 +319,7 @@ class CasePlanIndex:
         account_triggers: dict[str, set[str]] = {}
         account_trigger_alerts: dict[str, dict[str, list[dict[str, Any]]]] = {}
         mc_account_ids: list[int] = []
+        self._plan_id = str(plan.get("generated_at") or "unknown")
         for case in plan.get("malicious_cloaking_cases", []):
             account_id = str(case.get("account_id"))
             accounts[account_id] = case
@@ -326,12 +361,15 @@ class CasePlanIndex:
             return None
         return self._bulk_triggers.get(trigger_name)
 
-    def get_account_triggers(self, publisher_id: int) -> list[str]:
+    def get_account_triggers(self, publisher_id: str | int) -> list[str]:
         if not self._account_triggers:
             return []
         return sorted(self._account_triggers.get(str(publisher_id), set()))
 
-    def get_account_trigger_alerts(self, publisher_id: int, trigger_name: str) -> list[dict[str, Any]]:
+    def get_plan_id(self) -> str:
+        return self._plan_id
+
+    def get_account_trigger_alerts(self, publisher_id: str | int, trigger_name: str) -> list[dict[str, Any]]:
         if not self._account_trigger_alerts:
             return []
         return list(self._account_trigger_alerts.get(str(publisher_id), {}).get(trigger_name, []))
@@ -370,6 +408,7 @@ class CaseResult:
     success: bool
     response: Optional[dict[str, Any]] = None
     error: Optional[str] = None
+    status_code: Optional[int] = None
 
 
 class ProgressTracker:
@@ -407,6 +446,7 @@ class ProgressTracker:
             "publisher_id": result.publisher_id,
             "success": result.success,
             "error": result.error,
+            "status_code": result.status_code,
         }
         try:
             with self._path.open("a", encoding="utf-8") as handle:
@@ -460,7 +500,10 @@ class CaseBuilder:
     ) -> CasePayload:
         # Use first account as primary for required Salesforce fields
         primary = accounts[0]
-        publisher_id = int(primary.get("account_id"))
+        try:
+            publisher_id = int(primary.get("account_id"))
+        except (TypeError, ValueError):
+            publisher_id = 0
 
         campaign_ids = self._collect_campaign_ids(accounts)
         campaign_ids_str = ", ".join(campaign_ids) if campaign_ids else "Unknown"
@@ -494,12 +537,12 @@ class CaseBuilder:
             entry_lines.append(f"{idx}. Account ID: {account_id}")
             entry_lines.append(f"   Name:       {account_name}")
             if self._plan_index:
-                triggers = self._plan_index.get_account_triggers(int(account_id))
+                triggers = self._plan_index.get_account_triggers(account_id)
                 other_triggers = [t for t in triggers if t and t != trigger_name]
                 if other_triggers:
                     entry_lines.append(f"   Other Triggers: {', '.join(other_triggers)}")
                     for other_trigger in other_triggers:
-                        alerts = self._plan_index.get_account_trigger_alerts(int(account_id), other_trigger)
+                        alerts = self._plan_index.get_account_trigger_alerts(account_id, other_trigger)
                         other_latest_per_campaign: dict[str, str] = {}
                         for alert in alerts:
                             campaign_id = str(alert.get("campaign_id", "Unknown"))
@@ -540,7 +583,7 @@ class CaseBuilder:
             "record_type": "0123o00000224fEAAQ",
             "case_type": "Fraud",
             "request_for": trigger_detail,
-            "backstage_account_id": str(publisher_id),
+            "backstage_account_id": str(primary.get("account_id", publisher_id)),
             "flag_origin": "GeoEdge",
             "subject": subject,
             "description": "\n".join(description_lines),
@@ -550,6 +593,8 @@ class CaseBuilder:
             "ge_detected": "Yes",
             "ge_scanned": "Yes",
         }
+        if CASE_IDEMPOTENCY_FIELD:
+            payload[CASE_IDEMPOTENCY_FIELD] = f"{CASE_IDEMPOTENCY_PREFIX}:{trigger_name}:{part_label or '1'}:{campaign_ids_str}"
         if SF_OWNER_ID:
             payload["owner_id"] = SF_OWNER_ID
         return CasePayload(publisher_id=publisher_id, payload=payload)
@@ -568,6 +613,29 @@ class CaseBuilder:
             return []
 
         accounts = trigger_case.get("accounts", []) or []
+        if not accounts:
+            return []
+
+        filtered_accounts: list[dict[str, Any]] = []
+        id_map: dict[int, dict[str, Any]] = {}
+        for acct in accounts:
+            raw_id = acct.get("account_id")
+            try:
+                publisher_id = int(str(raw_id))
+            except (TypeError, ValueError):
+                LOGGER.info("Skipping bulk account with invalid id '%s'", raw_id)
+                continue
+            id_map[publisher_id] = acct
+
+        self._accessor.fetch_publisher_statuses(list(id_map.keys()))
+        for publisher_id, acct in id_map.items():
+            status = self._accessor.fetch_publisher_status(publisher_id)
+            if status == "LIVE":
+                filtered_accounts.append(acct)
+            else:
+                LOGGER.info("Skipping bulk account %s (status=%s)", publisher_id, status or "Unknown")
+
+        accounts = filtered_accounts
         if not accounts:
             return []
         if max_accounts is not None:
@@ -612,6 +680,10 @@ class CaseBuilder:
         return payloads[0] if payloads else None
 
     def build(self, publisher_id: int, allow_non_cloaking: bool = False) -> Optional[CasePayload]:
+        status = self._accessor.fetch_publisher_status(publisher_id)
+        if status != "LIVE":
+            LOGGER.info("Skipping publisher %s (status=%s)", publisher_id, status or "Unknown")
+            return None
         core = self._accessor.fetch_core(publisher_id)
         ge_scanned, project_ids = self._accessor.fetch_projects((core or {}).get("campaign_id"))
         ge_detected = self._accessor.alerts_exist(project_ids)
@@ -681,6 +753,8 @@ class CaseBuilder:
             "ge_detected": ge_detected,
             "ge_scanned": ge_scanned,
         }
+        if CASE_IDEMPOTENCY_FIELD:
+            payload[CASE_IDEMPOTENCY_FIELD] = f"{CASE_IDEMPOTENCY_PREFIX}:publisher:{publisher_id}:{campaign_ids_str}"
         if SF_OWNER_ID:
             payload["owner_id"] = SF_OWNER_ID
         return CasePayload(publisher_id=publisher_id, payload=payload)
@@ -886,7 +960,7 @@ class CasePoster:
                     )
                 else:
                     LOGGER.info("Salesforce case created for %s (HTTP %s)", case_payload.publisher_id, status)
-                return CaseResult(case_payload.publisher_id, True, response=body)
+                return CaseResult(case_payload.publisher_id, True, response=body, status_code=status)
 
             LOGGER.warning(
                 "Salesforce returned %s for publisher %s (attempt %s/%s)",
@@ -897,14 +971,14 @@ class CasePoster:
             )
 
             if status != 429 and status < 500:
-                return CaseResult(case_payload.publisher_id, False, response=body, error=str(body))
+                return CaseResult(case_payload.publisher_id, False, response=body, error=str(body), status_code=status)
 
             if attempt < MAX_CASE_RETRIES:
                 LOGGER.info("Sleeping %.1fs before retry", backoff)
                 time.sleep(backoff)
                 backoff *= 2
             else:
-                return CaseResult(case_payload.publisher_id, False, response=body, error=str(body))
+                return CaseResult(case_payload.publisher_id, False, response=body, error=str(body), status_code=status)
 
 
 # ---------------------------------------------------------------------------
@@ -918,17 +992,19 @@ class CaseRunner:
         batch_sleep: float = 0,
         progress: Optional[ProgressTracker] = None,
         resume: bool = False,
+        plan_id: str = "unknown",
     ) -> None:
         self._builder = builder
         self._poster = poster
         self._batch_sleep = batch_sleep
         self._progress = progress
         self._resume = resume
+        self._plan_id = plan_id
 
     def run(self, publisher_ids: Sequence[int]) -> list[CaseResult]:
         results: list[CaseResult] = []
         for idx, pub_id in enumerate(publisher_ids, start=1):
-            progress_key = f"publisher:{pub_id}"
+            progress_key = f"{self._plan_id}|publisher:{pub_id}"
             if self._resume and self._progress and self._progress.has(progress_key):
                 LOGGER.info("Skipping publisher %s (already recorded in progress)", pub_id)
                 results.append(CaseResult(pub_id, False, error="Skipped (resume)"))
@@ -953,7 +1029,7 @@ class CaseRunner:
     def close(self, publisher_ids: Sequence[int], status: str) -> list[CaseResult]:
         results: list[CaseResult] = []
         for idx, pub_id in enumerate(publisher_ids, start=1):
-            progress_key = f"close:{pub_id}"
+            progress_key = f"{self._plan_id}|close:{pub_id}"
             if self._resume and self._progress and self._progress.has(progress_key):
                 LOGGER.info("Skipping publisher %s (already recorded in progress)", pub_id)
                 results.append(CaseResult(pub_id, False, error="Skipped (resume)"))
@@ -983,7 +1059,7 @@ class CaseRunner:
         max_accounts_per_case: Optional[int] = None,
         max_campaign_ids_len: Optional[int] = None,
     ) -> list[CaseResult]:
-        progress_key = f"bulk:{trigger_name}"
+        progress_key = f"{self._plan_id}|bulk:{trigger_name}"
         if self._resume and self._progress and self._progress.has(progress_key):
             LOGGER.info("Skipping bulk trigger %s (already recorded in progress)", trigger_name)
             return [CaseResult(0, False, error="Skipped (resume)")]
@@ -1010,7 +1086,7 @@ class CaseRunner:
         max_accounts_per_case: Optional[int] = None,
         max_campaign_ids_len: Optional[int] = None,
     ) -> list[CaseResult]:
-        progress_key = f"bulk_close:{trigger_name}"
+        progress_key = f"{self._plan_id}|bulk_close:{trigger_name}"
         if self._resume and self._progress and self._progress.has(progress_key):
             LOGGER.info("Skipping bulk trigger %s (already recorded in progress)", trigger_name)
             return [CaseResult(0, False, error="Skipped (resume)")]
@@ -1137,7 +1213,14 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     builder = CaseBuilder(accessor, plan_index=plan_index)
     poster = CasePoster(dry_run=args.dry_run)
     progress = ProgressTracker(Path(args.progress_file)) if args.progress_file else None
-    runner = CaseRunner(builder, poster, batch_sleep=args.batch_sleep, progress=progress, resume=args.resume)
+    runner = CaseRunner(
+        builder,
+        poster,
+        batch_sleep=args.batch_sleep,
+        progress=progress,
+        resume=args.resume,
+        plan_id=plan_index.get_plan_id(),
+    )
 
     try:
         if args.bulk_trigger:
