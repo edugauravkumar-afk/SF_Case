@@ -7,6 +7,7 @@ import logging
 import os
 import sys
 import time
+from email.utils import parsedate_to_datetime
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -69,7 +70,10 @@ VERTICA_CFG = {
 SF_CASE_URL = _env_or_fail("SF_CASE_URL")
 SF_API_TOKEN = _env_or_fail("SF_API_TOKEN")
 GEOEDGE_API_KEY = _env_or_fail("GEOEDGE_API_KEY")
-SF_OWNER_ID = _env_or_default("SF_OWNER_ID", "0050V000007mBZkQAM")
+CASE_OWNER_IDS = _env_or_default(
+    "CASE_OWNER_IDS",
+    "005Nr000000U3OfIAK,005Nr00000AYKD3IAP,0053o00000ALt9aAAD",
+)
 
 MAX_CASE_RETRIES = int(_env_or_default("CASE_MAX_RETRIES", "4"))
 INITIAL_BACKOFF = float(_env_or_default("CASE_INITIAL_BACKOFF", "5"))
@@ -180,55 +184,83 @@ class CaseDataAccessor:
         self._http_session = requests.Session()
         self._http_session.headers.update({"Authorization": GEOEDGE_API_KEY})
         self._publisher_status_cache: dict[int, Optional[str]] = {}
+        self._core_cache: dict[int, dict[str, Any]] = {}
+        self._projects_cache: dict[int, tuple[str, list[str]]] = {}
+        self._alerts_exist_cache: dict[tuple[str, ...], str] = {}
+        self._spend_cache: dict[int, Optional[float]] = {}
+        self._tier3_cache: dict[int, bool] = {}
 
     def is_tier3(self, publisher_id: int) -> bool:
+        if publisher_id in self._tier3_cache:
+            return self._tier3_cache[publisher_id]
         rows = self._db.vertica_query(
             "SELECT media_tier_id FROM trc.sp_syndication_base WHERE syndicator_id = %s LIMIT 1",
             (publisher_id,),
         )
-        return bool(rows) and rows[0][0] == 3
+        is_tier3 = bool(rows) and rows[0][0] == 3
+        self._tier3_cache[publisher_id] = is_tier3
+        return is_tier3
 
     def fetch_core(self, publisher_id: int) -> dict[str, Any]:
+        if publisher_id in self._core_cache:
+            return self._core_cache[publisher_id]
         rows = self._db.vertica_query(CORE_SQL, (publisher_id,))
         if not rows:
+            self._core_cache[publisher_id] = {}
             return {}
         name, email, campaign_id, item_id, url = rows[0]
-        return {
+        payload = {
             "name": name,
             "email": email,
             "campaign_id": campaign_id,
             "item_id": item_id,
             "url": url,
         }
+        self._core_cache[publisher_id] = payload
+        return payload
 
     def fetch_projects(self, campaign_id: Optional[int]) -> tuple[str, List[str]]:
         if campaign_id is None:
             return "No", []
+        if campaign_id in self._projects_cache:
+            status, ids = self._projects_cache[campaign_id]
+            return status, list(ids)
         rows = self._db.mysql_query(
             "SELECT project_id FROM trc.geo_edge_projects WHERE campaign_id = %s",
             (campaign_id,),
         )
         project_ids = [row[0] for row in rows]
-        return ("Yes" if project_ids else "No"), project_ids
+        result = ("Yes" if project_ids else "No"), project_ids
+        self._projects_cache[campaign_id] = (result[0], list(project_ids))
+        return result
 
     def alerts_exist(self, project_ids: Sequence[str]) -> str:
         if not project_ids:
             return "No"
+        normalized = tuple(sorted({str(pid) for pid in project_ids if str(pid).strip()}))
+        if normalized in self._alerts_exist_cache:
+            return self._alerts_exist_cache[normalized]
         base_url = "https://api.geoedge.com/rest/analytics/v3/alerts/history"
         params = {"limit": 1}
-        for pid in project_ids:
+        for pid in normalized:
             params["project_id"] = pid
             resp = self._http_session.get(base_url, params=params, timeout=20)
             resp.raise_for_status()
             body = resp.json()
             alerts = body.get("response", {}).get("alerts") or body.get("alerts", [])
             if alerts:
+                self._alerts_exist_cache[normalized] = "Yes"
                 return "Yes"
+        self._alerts_exist_cache[normalized] = "No"
         return "No"
 
     def total_spent(self, publisher_id: int) -> Optional[float]:
+        if publisher_id in self._spend_cache:
+            return self._spend_cache[publisher_id]
         rows = self._db.vertica_query(SPEND_SQL, (publisher_id,))
-        return rows[0][0] if rows else None
+        total = rows[0][0] if rows else None
+        self._spend_cache[publisher_id] = total
+        return total
 
     def fetch_publisher_status(self, publisher_id: int) -> Optional[str]:
         if publisher_id in self._publisher_status_cache:
@@ -284,6 +316,7 @@ class CasePlanIndex:
         self._account_triggers: dict[str, set[str]] = {}
         self._account_trigger_alerts: dict[str, dict[str, list[dict[str, Any]]]] = {}
         self._mc_account_ids: list[int] = []
+        self._mc_account_id_set: set[int] = set()
         self._plan_id: str = "unknown"
         if plan_path is not None:
             self._load(plan_path)
@@ -349,6 +382,7 @@ class CasePlanIndex:
         self._account_triggers = account_triggers
         self._account_trigger_alerts = account_trigger_alerts
         self._mc_account_ids = sorted(set(mc_account_ids))
+        self._mc_account_id_set = set(self._mc_account_ids)
         LOGGER.info("Loaded %s accounts from case plan", len(self._accounts))
 
     def get_account(self, publisher_id: int) -> Optional[dict[str, Any]]:
@@ -390,7 +424,7 @@ class CasePlanIndex:
         return list(self._mc_account_ids)
 
     def is_malicious_account_id(self, publisher_id: int) -> bool:
-        return publisher_id in set(self._mc_account_ids)
+        return publisher_id in self._mc_account_id_set
 
 
 # ---------------------------------------------------------------------------
@@ -409,6 +443,8 @@ class CaseResult:
     response: Optional[dict[str, Any]] = None
     error: Optional[str] = None
     status_code: Optional[int] = None
+    case_id: Optional[str] = None
+    idempotency_key: Optional[str] = None
 
 
 class ProgressTracker:
@@ -447,6 +483,8 @@ class ProgressTracker:
             "success": result.success,
             "error": result.error,
             "status_code": result.status_code,
+            "case_id": result.case_id,
+            "idempotency_key": result.idempotency_key,
         }
         try:
             with self._path.open("a", encoding="utf-8") as handle:
@@ -456,10 +494,29 @@ class ProgressTracker:
         self._seen[key] = result.success
 
 
+class OwnerAssigner:
+    def __init__(self, owners: Sequence[str]) -> None:
+        self._owners = [owner.strip() for owner in owners if owner.strip()]
+        self._index = 0
+
+    def next_owner(self) -> Optional[str]:
+        if not self._owners:
+            return None
+        owner = self._owners[self._index % len(self._owners)]
+        self._index += 1
+        return owner
+
+
 class CaseBuilder:
-    def __init__(self, accessor: CaseDataAccessor, plan_index: Optional[CasePlanIndex] = None) -> None:
+    def __init__(
+        self,
+        accessor: CaseDataAccessor,
+        plan_index: Optional[CasePlanIndex] = None,
+        owner_assigner: Optional[OwnerAssigner] = None,
+    ) -> None:
         self._accessor = accessor
         self._plan_index = plan_index
+        self._owner_assigner = owner_assigner
 
     @staticmethod
     def _has_cloaking_alerts(alerts: Sequence[dict[str, Any]]) -> bool:
@@ -581,7 +638,7 @@ class CaseBuilder:
 
         payload = {
             "record_type": "0123o00000224fEAAQ",
-            "case_type": "Fraud",
+            "case_type": "Cloaking",
             "request_for": trigger_detail,
             "backstage_account_id": str(primary.get("account_id", publisher_id)),
             "flag_origin": "GeoEdge",
@@ -594,9 +651,13 @@ class CaseBuilder:
             "ge_scanned": "Yes",
         }
         if CASE_IDEMPOTENCY_FIELD:
-            payload[CASE_IDEMPOTENCY_FIELD] = f"{CASE_IDEMPOTENCY_PREFIX}:{trigger_name}:{part_label or '1'}:{campaign_ids_str}"
-        if SF_OWNER_ID:
-            payload["owner_id"] = SF_OWNER_ID
+            # Idempotency key: stable across runs with same account/trigger/campaigns
+            # Sort campaign_ids to ensure consistent key regardless of fetch order
+            sorted_campaigns = ", ".join(sorted(campaign_ids)) if campaign_ids else "Unknown"
+            payload[CASE_IDEMPOTENCY_FIELD] = f"{CASE_IDEMPOTENCY_PREFIX}:{publisher_id}:{trigger_name}:{part_label or '1'}:{sorted_campaigns}"
+        owner_id = self._owner_assigner.next_owner() if self._owner_assigner else None
+        if owner_id:
+            payload["owner_id"] = owner_id
         return CasePayload(publisher_id=publisher_id, payload=payload)
 
     def build_bulk_trigger_cases(
@@ -647,23 +708,48 @@ class CaseBuilder:
         batches: list[list[dict[str, Any]]] = []
         current_accounts: list[dict[str, Any]] = []
         current_campaign_ids: list[str] = []
+        current_campaign_id_set: set[str] = set()
+        current_campaign_len = 0
+
+        def _unique_account_campaign_ids(acct: dict[str, Any]) -> list[str]:
+            unique_ids: list[str] = []
+            seen: set[str] = set()
+            for cid in acct.get("campaign_ids", []) or []:
+                cid_str = str(cid)
+                if not cid_str or cid_str in seen:
+                    continue
+                seen.add(cid_str)
+                unique_ids.append(cid_str)
+            return unique_ids
 
         for acct in accounts:
-            next_accounts = current_accounts + [acct]
-            next_campaign_ids = self._collect_campaign_ids(next_accounts)
-            next_campaign_len = len(", ".join(next_campaign_ids)) if next_campaign_ids else 0
+            next_accounts_count = len(current_accounts) + 1
+            next_campaign_ids = _unique_account_campaign_ids(acct)
+            new_ids = [cid for cid in next_campaign_ids if cid not in current_campaign_id_set]
 
-            too_many_accounts = per_case_limit and len(next_accounts) > per_case_limit
+            if current_campaign_len == 0:
+                added_len = sum(len(cid) for cid in new_ids) + (2 * max(0, len(new_ids) - 1))
+                next_campaign_len = added_len
+            else:
+                added_len = sum(len(cid) for cid in new_ids) + (2 * len(new_ids))
+                next_campaign_len = current_campaign_len + added_len
+
+            too_many_accounts = per_case_limit and next_accounts_count > per_case_limit
             too_long_campaigns = campaign_len_limit and next_campaign_len > campaign_len_limit
 
             if (too_many_accounts or too_long_campaigns) and current_accounts:
                 batches.append(current_accounts)
                 current_accounts = [acct]
                 current_campaign_ids = self._collect_campaign_ids(current_accounts)
+                current_campaign_id_set = set(current_campaign_ids)
+                current_campaign_len = len(", ".join(current_campaign_ids)) if current_campaign_ids else 0
                 continue
 
-            current_accounts = next_accounts
-            current_campaign_ids = next_campaign_ids
+            current_accounts.append(acct)
+            if new_ids:
+                current_campaign_ids.extend(new_ids)
+                current_campaign_id_set.update(new_ids)
+                current_campaign_len = next_campaign_len
 
         if current_accounts:
             batches.append(current_accounts)
@@ -741,7 +827,7 @@ class CaseBuilder:
 
         payload = {
             "record_type": "0123o00000224fEAAQ",
-            "case_type": "Fraud",
+            "case_type": "Cloaking",
             "request_for": trigger_detail,
             "backstage_account_id": str(publisher_id),
             "flag_origin": "GeoEdge",
@@ -755,8 +841,9 @@ class CaseBuilder:
         }
         if CASE_IDEMPOTENCY_FIELD:
             payload[CASE_IDEMPOTENCY_FIELD] = f"{CASE_IDEMPOTENCY_PREFIX}:publisher:{publisher_id}:{campaign_ids_str}"
-        if SF_OWNER_ID:
-            payload["owner_id"] = SF_OWNER_ID
+        owner_id = self._owner_assigner.next_owner() if self._owner_assigner else None
+        if owner_id:
+            payload["owner_id"] = owner_id
         return CasePayload(publisher_id=publisher_id, payload=payload)
 
     @staticmethod
@@ -930,10 +1017,71 @@ class CasePoster:
         self._session.headers.update({"Content-Type": "application/json", "API-TOKEN": SF_API_TOKEN})
         self._dry_run = dry_run
 
-    def post(self, case_payload: CasePayload) -> CaseResult:
+
+    def _check_duplicate_in_salesforce(self, publisher_id: int, idempotency_key: str) -> bool:
+        """Query Salesforce to check if a case already exists for this publisher/idempotency key."""
+        try:
+            # Query Salesforce for existing cases with matching idempotency key
+            # This prevents true duplicates from being created on Salesforce side
+            query_url = f"{SF_CASE_URL}?action=query_by_idempotency&idempotency_key={idempotency_key}"
+            response = self._session.get(query_url, timeout=10)
+            
+            if response.status_code == 200:
+                body = response.json()
+                if isinstance(body, dict) and body.get("exists"):
+                    LOGGER.info("Case already exists in Salesforce with idempotency_key %s for publisher %s", idempotency_key, publisher_id)
+                    return True
+            elif response.status_code != 404:
+                LOGGER.warning("Unexpected status %s when checking for duplicate case in Salesforce", response.status_code)
+        except Exception as e:
+            LOGGER.warning("Error checking for duplicate in Salesforce: %s", e)
+        
+        return False
+
+    def post(self, case_payload: CasePayload, progress_tracker: 'ProgressTracker' = None) -> CaseResult:
+        # Strict duplicate check: check both progress tracker and Salesforce
+        publisher_id = case_payload.publisher_id
+        idempotency_key = case_payload.payload.get(CASE_IDEMPOTENCY_FIELD, "")
+        now = datetime.now(timezone.utc)
+        
+        # First check: local progress file (fast, for recent cases)
+        if progress_tracker:
+            try:
+                with progress_tracker._path.open("r", encoding="utf-8") as handle:
+                    for line in handle:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            entry = json.loads(line)
+                        except Exception:
+                            continue
+                        # Only check successful cases
+                        if not entry.get("success"):
+                            continue
+                        # Check publisher and idempotency key match (more reliable than campaign_ids)
+                        if int(entry.get("publisher_id", 0)) == publisher_id:
+                            entry_key = entry.get("key", "")
+                            if idempotency_key and entry_key and idempotency_key in entry_key:
+                                ts = entry.get("ts")
+                                if ts:
+                                    try:
+                                        entry_dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                                        if (now - entry_dt).total_seconds() < 48 * 3600:
+                                            LOGGER.info("Duplicate case detected in progress for publisher %s with key %s in last 48h, skipping.", publisher_id, idempotency_key)
+                                            return CaseResult(publisher_id, True, response={"skipped": True, "reason": "duplicate in last 48h (progress)"}, idempotency_key=idempotency_key)
+                                    except Exception:
+                                        continue
+            except Exception:
+                pass
+        
+        # Second check: Salesforce (for cases older than progress file or cross-run duplicates)
+        if idempotency_key:
+            if self._check_duplicate_in_salesforce(publisher_id, idempotency_key):
+                return CaseResult(publisher_id, True, response={"skipped": True, "reason": "duplicate in Salesforce"}, idempotency_key=idempotency_key)
         if self._dry_run:
             LOGGER.info("[DRY-RUN] Would create case for publisher %s", case_payload.publisher_id)
-            return CaseResult(case_payload.publisher_id, True, response={"dry_run": True})
+            return CaseResult(case_payload.publisher_id, True, response={"dry_run": True}, idempotency_key=idempotency_key)
 
         backoff = INITIAL_BACKOFF
         for attempt in range(1, MAX_CASE_RETRIES + 1):
@@ -960,7 +1108,14 @@ class CasePoster:
                     )
                 else:
                     LOGGER.info("Salesforce case created for %s (HTTP %s)", case_payload.publisher_id, status)
-                return CaseResult(case_payload.publisher_id, True, response=body, status_code=status)
+                return CaseResult(
+                    case_payload.publisher_id,
+                    True,
+                    response=body,
+                    status_code=status,
+                    case_id=case_id,
+                    idempotency_key=idempotency_key,
+                )
 
             LOGGER.warning(
                 "Salesforce returned %s for publisher %s (attempt %s/%s)",
@@ -969,16 +1124,55 @@ class CasePoster:
                 attempt,
                 MAX_CASE_RETRIES,
             )
+            if status == 429:
+                retry_after = response.headers.get("Retry-After")
+                rate_limit = response.headers.get("X-RateLimit-Limit")
+                rate_remaining = response.headers.get("X-RateLimit-Remaining")
+                rate_reset = response.headers.get("X-RateLimit-Reset")
+                LOGGER.warning(
+                    "Rate limit headers: Retry-After=%s, X-RateLimit-Limit=%s, X-RateLimit-Remaining=%s, X-RateLimit-Reset=%s",
+                    retry_after,
+                    rate_limit,
+                    rate_remaining,
+                    rate_reset,
+                )
 
             if status != 429 and status < 500:
-                return CaseResult(case_payload.publisher_id, False, response=body, error=str(body), status_code=status)
+                return CaseResult(
+                    case_payload.publisher_id,
+                    False,
+                    response=body,
+                    error=str(body),
+                    status_code=status,
+                    idempotency_key=idempotency_key,
+                )
 
             if attempt < MAX_CASE_RETRIES:
-                LOGGER.info("Sleeping %.1fs before retry", backoff)
-                time.sleep(backoff)
+                sleep_for = backoff
+                if status == 429 and retry_after:
+                    try:
+                        sleep_for = float(retry_after)
+                    except ValueError:
+                        try:
+                            retry_dt = parsedate_to_datetime(retry_after)
+                            if retry_dt.tzinfo is None:
+                                retry_dt = retry_dt.replace(tzinfo=timezone.utc)
+                            now_dt = datetime.now(timezone.utc)
+                            sleep_for = max(0.0, (retry_dt - now_dt).total_seconds())
+                        except (TypeError, ValueError):
+                            sleep_for = backoff
+                LOGGER.info("Sleeping %.1fs before retry", sleep_for)
+                time.sleep(sleep_for)
                 backoff *= 2
             else:
-                return CaseResult(case_payload.publisher_id, False, response=body, error=str(body), status_code=status)
+                return CaseResult(
+                    case_payload.publisher_id,
+                    False,
+                    response=body,
+                    error=str(body),
+                    status_code=status,
+                    idempotency_key=idempotency_key,
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -1002,28 +1196,69 @@ class CaseRunner:
         self._plan_id = plan_id
 
     def run(self, publisher_ids: Sequence[int]) -> list[CaseResult]:
+        import threading
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
         results: list[CaseResult] = []
-        for idx, pub_id in enumerate(publisher_ids, start=1):
-            progress_key = f"{self._plan_id}|publisher:{pub_id}"
-            if self._resume and self._progress and self._progress.has(progress_key):
-                LOGGER.info("Skipping publisher %s (already recorded in progress)", pub_id)
-                results.append(CaseResult(pub_id, False, error="Skipped (resume)"))
-                continue
-            LOGGER.info("Processing publisher %s (%s/%s)", pub_id, idx, len(publisher_ids))
-            payload = self._builder.build(pub_id)
-            if payload is None:
-                result = CaseResult(pub_id, False, error="Skipped")
-                results.append(result)
+        results_lock = threading.Lock()
+        progress_lock = threading.Lock()
+
+        def process_publisher(idx_pubid):
+            import traceback
+            idx, pub_id = idx_pubid
+            thread_name = threading.current_thread().name
+            LOGGER.info(f"[Thread {thread_name}] Starting publisher {pub_id} ({idx+1}/{len(publisher_ids)})")
+            # Each thread creates its own DB client and builder to avoid shared connections
+            db_client = None
+            try:
+                from case_creator import DatabaseClient, CaseDataAccessor, CaseBuilder
+                db_client = DatabaseClient()
+                accessor = CaseDataAccessor(db_client)
+                # Use the same plan_index and owner_assigner as the main builder
+                builder = CaseBuilder(accessor, plan_index=self._builder._plan_index, owner_assigner=self._builder._owner_assigner)
+                progress_key = f"{self._plan_id}|publisher:{pub_id}"
+                if self._resume and self._progress and self._progress.has(progress_key):
+                    LOGGER.info(f"[Thread {thread_name}] Skipping publisher %s (already recorded in progress)", pub_id)
+                    result = CaseResult(pub_id, False, error="Skipped (resume)")
+                    with results_lock:
+                        results.append(result)
+                    return result
+                payload = builder.build(pub_id)
+                if payload is None:
+                    result = CaseResult(pub_id, False, error="Skipped")
+                    with results_lock:
+                        results.append(result)
+                    if self._progress:
+                        with progress_lock:
+                            self._progress.record(progress_key, result)
+                    return result
+                result = self._poster.post(payload)
+                with results_lock:
+                    results.append(result)
                 if self._progress:
-                    self._progress.record(progress_key, result)
-                continue
-            result = self._poster.post(payload)
-            results.append(result)
-            if self._progress:
-                self._progress.record(progress_key, result)
-            if self._batch_sleep and idx < len(publisher_ids):
-                LOGGER.debug("Sleeping %.1fs between publishers", self._batch_sleep)
-                time.sleep(self._batch_sleep)
+                    with progress_lock:
+                        self._progress.record(progress_key, result)
+                return result
+            except Exception as exc:
+                LOGGER.error(f"[Thread {thread_name}] Exception for publisher {pub_id}: {exc}\n{traceback.format_exc()}")
+                result = CaseResult(pub_id, False, error=f"Exception: {exc}")
+                with results_lock:
+                    results.append(result)
+                return result
+            finally:
+                if db_client:
+                    try:
+                        db_client.close()
+                    except Exception:
+                        pass
+                LOGGER.info(f"[Thread {thread_name}] Finished publisher {pub_id}")
+
+        max_workers = min(8, len(publisher_ids)) if publisher_ids else 1
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(process_publisher, (idx, pub_id)) for idx, pub_id in enumerate(publisher_ids)]
+            for future in as_completed(futures):
+                pass
+        results.sort(key=lambda r: publisher_ids.index(r.publisher_id) if r.publisher_id in publisher_ids else 1e9)
         return results
 
     def close(self, publisher_ids: Sequence[int], status: str) -> list[CaseResult]:
@@ -1073,7 +1308,13 @@ class CaseRunner:
             return [CaseResult(0, False, error=f"No bulk trigger case found for '{trigger_name}'")]
         results: list[CaseResult] = []
         for payload in payloads:
-            results.append(self._poster.post(payload))
+            result = self._poster.post(payload, progress_tracker=self._progress)
+            results.append(result)
+            if self._progress:
+                # Record each bulk case individually with a stable key that includes part label for traceability
+                part_label = payload.payload.get("subject", trigger_name)
+                per_case_key = f"{self._plan_id}|bulk:{trigger_name}:{len(results)}"
+                self._progress.record(per_case_key, result)
         if self._progress:
             self._progress.record(progress_key, CaseResult(0, all(r.success for r in results)))
         return results
@@ -1210,7 +1451,9 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     db_client = DatabaseClient()
     accessor = CaseDataAccessor(db_client)
     plan_index = CasePlanIndex(plan_path)
-    builder = CaseBuilder(accessor, plan_index=plan_index)
+    owners = [owner for owner in CASE_OWNER_IDS.split(",") if owner.strip()]
+    owner_assigner = OwnerAssigner(owners) if owners else None
+    builder = CaseBuilder(accessor, plan_index=plan_index, owner_assigner=owner_assigner)
     poster = CasePoster(dry_run=args.dry_run)
     progress = ProgressTracker(Path(args.progress_file)) if args.progress_file else None
     runner = CaseRunner(
