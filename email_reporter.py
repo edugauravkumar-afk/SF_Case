@@ -2,11 +2,14 @@
 """Simple SMTP email sender for run notifications."""
 from __future__ import annotations
 
+import logging
 import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Iterable
+
+_LOG = logging.getLogger(__name__)
 
 
 def _split_recipients(value: str | None) -> list[str]:
@@ -31,6 +34,10 @@ class EmailSender:
 
     def send(self, subject: str, html_body: str) -> None:
         if not self.is_configured():
+            _LOG.warning(
+                "Email not sent — SMTP not configured. "
+                "Set SMTP_SERVER, FROM_EMAIL, and RECIPIENTS in .env."
+            )
             return
 
         message = MIMEMultipart("alternative")

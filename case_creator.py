@@ -105,6 +105,10 @@ class DatabaseClient:
         if self._vertica is None:
             self._vertica = vertica_python.connect(**VERTICA_CFG)
         elif self._vertica.closed():
+            try:
+                self._vertica.close()
+            except Exception as e:
+                LOGGER.warning("Failed to close stale Vertica connection: %s", e)
             self._vertica = vertica_python.connect(**VERTICA_CFG)
         return self._vertica
 
@@ -127,13 +131,13 @@ class DatabaseClient:
         if self._mysql is not None:
             try:
                 self._mysql.close()
-            except Exception:  # pragma: no cover - best effort cleanup
-                pass
+            except Exception as e:  # pragma: no cover - best effort cleanup
+                LOGGER.warning("Failed to close MySQL connection: %s", e)
         if self._vertica is not None:
             try:
                 self._vertica.close()
-            except Exception:
-                pass
+            except Exception as e:
+                LOGGER.warning("Failed to close Vertica connection: %s", e)
 
 
 # ---------------------------------------------------------------------------
@@ -451,6 +455,8 @@ class ProgressTracker:
     def __init__(self, path: Path) -> None:
         self._path = path
         self._seen: dict[str, bool] = {}
+        self._idempotency_seen: dict[str, str] = {}  # idempotency_key -> case_id (for successful cases)
+        self._idempotency_seen_today: dict[str, str] = {}
         self._load()
 
     def _load(self) -> None:
@@ -469,11 +475,42 @@ class ProgressTracker:
                     key = entry.get("key")
                     if key:
                         self._seen[str(key)] = bool(entry.get("success"))
+                    # Track successful cases by idempotency key for cross-run duplicate detection
+                    if entry.get("success") and entry.get("idempotency_key"):
+                        idempotency_key = str(entry["idempotency_key"])
+                        case_id = entry.get("case_id") or "exists"
+                        self._idempotency_seen[idempotency_key] = case_id
+                        entry_ts = entry.get("ts")
+                        if isinstance(entry_ts, str):
+                            try:
+                                dt = datetime.fromisoformat(entry_ts)
+                                if dt.tzinfo is None:
+                                    dt = dt.replace(tzinfo=timezone.utc)
+                                if dt.astimezone(timezone.utc).date() == datetime.now(timezone.utc).date():
+                                    self._idempotency_seen_today[idempotency_key] = case_id
+                            except ValueError:
+                                pass
         except OSError:
             return
 
     def has(self, key: str) -> bool:
         return bool(self._seen.get(key))
+
+    def has_idempotency_key(self, idempotency_key: str) -> bool:
+        """Check if a case with this idempotency key was already successfully created."""
+        return bool(idempotency_key and idempotency_key in self._idempotency_seen)
+
+    def has_idempotency_key_today(self, idempotency_key: str) -> bool:
+        """Check if a case with this idempotency key was successfully created today (UTC)."""
+        return bool(idempotency_key and idempotency_key in self._idempotency_seen_today)
+
+    def get_case_id_for_idempotency(self, idempotency_key: str) -> Optional[str]:
+        """Return the case_id for a previously created case with this idempotency key."""
+        return self._idempotency_seen.get(idempotency_key)
+
+    def get_case_id_for_idempotency_today(self, idempotency_key: str) -> Optional[str]:
+        """Return today's case_id for this idempotency key, if present."""
+        return self._idempotency_seen_today.get(idempotency_key)
 
     def record(self, key: str, result: CaseResult) -> None:
         payload = {
@@ -492,6 +529,11 @@ class ProgressTracker:
         except OSError:
             return
         self._seen[key] = result.success
+        # Also track by idempotency key for duplicate detection
+        if result.success and result.idempotency_key:
+            case_id = result.case_id or "exists"
+            self._idempotency_seen[result.idempotency_key] = case_id
+            self._idempotency_seen_today[result.idempotency_key] = case_id
 
 
 class OwnerAssigner:
@@ -1018,67 +1060,28 @@ class CasePoster:
         self._dry_run = dry_run
 
 
-    def _check_duplicate_in_salesforce(self, publisher_id: int, idempotency_key: str) -> bool:
-        """Query Salesforce to check if a case already exists for this publisher/idempotency key."""
-        try:
-            # Query Salesforce for existing cases with matching idempotency key
-            # This prevents true duplicates from being created on Salesforce side
-            query_url = f"{SF_CASE_URL}?action=query_by_idempotency&idempotency_key={idempotency_key}"
-            response = self._session.get(query_url, timeout=10)
-            
-            if response.status_code == 200:
-                body = response.json()
-                if isinstance(body, dict) and body.get("exists"):
-                    LOGGER.info("Case already exists in Salesforce with idempotency_key %s for publisher %s", idempotency_key, publisher_id)
-                    return True
-            elif response.status_code != 404:
-                LOGGER.warning("Unexpected status %s when checking for duplicate case in Salesforce", response.status_code)
-        except Exception as e:
-            LOGGER.warning("Error checking for duplicate in Salesforce: %s", e)
-        
-        return False
-
     def post(self, case_payload: CasePayload, progress_tracker: 'ProgressTracker' = None) -> CaseResult:
-        # Strict duplicate check: check both progress tracker and Salesforce
+        # Strict duplicate check using idempotency key
         publisher_id = case_payload.publisher_id
         idempotency_key = case_payload.payload.get(CASE_IDEMPOTENCY_FIELD, "")
-        now = datetime.now(timezone.utc)
         
-        # First check: local progress file (fast, for recent cases)
-        if progress_tracker:
-            try:
-                with progress_tracker._path.open("r", encoding="utf-8") as handle:
-                    for line in handle:
-                        line = line.strip()
-                        if not line:
-                            continue
-                        try:
-                            entry = json.loads(line)
-                        except Exception:
-                            continue
-                        # Only check successful cases
-                        if not entry.get("success"):
-                            continue
-                        # Check publisher and idempotency key match (more reliable than campaign_ids)
-                        if int(entry.get("publisher_id", 0)) == publisher_id:
-                            entry_key = entry.get("key", "")
-                            if idempotency_key and entry_key and idempotency_key in entry_key:
-                                ts = entry.get("ts")
-                                if ts:
-                                    try:
-                                        entry_dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-                                        if (now - entry_dt).total_seconds() < 48 * 3600:
-                                            LOGGER.info("Duplicate case detected in progress for publisher %s with key %s in last 48h, skipping.", publisher_id, idempotency_key)
-                                            return CaseResult(publisher_id, True, response={"skipped": True, "reason": "duplicate in last 48h (progress)"}, idempotency_key=idempotency_key)
-                                    except Exception:
-                                        continue
-            except Exception:
-                pass
-        
-        # Second check: Salesforce (for cases older than progress file or cross-run duplicates)
-        if idempotency_key:
-            if self._check_duplicate_in_salesforce(publisher_id, idempotency_key):
-                return CaseResult(publisher_id, True, response={"skipped": True, "reason": "duplicate in Salesforce"}, idempotency_key=idempotency_key)
+        # Check if this exact case was already created (by idempotency key)
+        if progress_tracker and idempotency_key:
+            if progress_tracker.has_idempotency_key_today(idempotency_key):
+                existing_case_id = progress_tracker.get_case_id_for_idempotency_today(idempotency_key)
+                LOGGER.info(
+                    "Case already created today for publisher %s with idempotency_key %s (existing case: %s), skipping.",
+                    publisher_id, idempotency_key, existing_case_id or "unknown"
+                )
+                return CaseResult(
+                    publisher_id, True,
+                    response={"skipped": True, "reason": "duplicate today", "existing_case_id": existing_case_id},
+                    idempotency_key=idempotency_key,
+                    case_id=existing_case_id
+                )
+            # Cross-day dedup intentionally removed: the pipeline is daily and each day's
+            # alerts should generate fresh cases regardless of previous days' history.
+            # Within-day dedup (has_idempotency_key_today) above is sufficient.
         if self._dry_run:
             LOGGER.info("[DRY-RUN] Would create case for publisher %s", case_payload.publisher_id)
             return CaseResult(case_payload.publisher_id, True, response={"dry_run": True}, idempotency_key=idempotency_key)
@@ -1088,7 +1091,8 @@ class CasePoster:
             if DEBUG_CASE_PAYLOAD:
                 payload_dump = json.dumps(case_payload.payload, ensure_ascii=False, default=str)
                 LOGGER.info("Posting case payload for %s: %s", case_payload.publisher_id, payload_dump)
-            response = self._session.post(SF_CASE_URL, json=case_payload.payload, timeout=30)
+            # Bump timeout to reduce flaky ReadTimeouts from Workato/SF gateway
+            response = self._session.post(SF_CASE_URL, json=case_payload.payload, timeout=60)
             status = response.status_code
             try:
                 body = response.json()
@@ -1161,6 +1165,9 @@ class CasePoster:
                             sleep_for = max(0.0, (retry_dt - now_dt).total_seconds())
                         except (TypeError, ValueError):
                             sleep_for = backoff
+                # Always respect at least the exponential backoff floor so that an
+                # already-expired Retry-After header doesn't cause immediate retries.
+                sleep_for = max(sleep_for, backoff)
                 LOGGER.info("Sleeping %.1fs before retry", sleep_for)
                 time.sleep(sleep_for)
                 backoff *= 2
@@ -1196,68 +1203,52 @@ class CaseRunner:
         self._plan_id = plan_id
 
     def run(self, publisher_ids: Sequence[int]) -> list[CaseResult]:
-        import threading
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+        import traceback
 
         results: list[CaseResult] = []
-        results_lock = threading.Lock()
-        progress_lock = threading.Lock()
 
-        def process_publisher(idx_pubid):
-            import traceback
-            idx, pub_id = idx_pubid
-            thread_name = threading.current_thread().name
-            LOGGER.info(f"[Thread {thread_name}] Starting publisher {pub_id} ({idx+1}/{len(publisher_ids)})")
-            # Each thread creates its own DB client and builder to avoid shared connections
-            db_client = None
-            try:
-                from case_creator import DatabaseClient, CaseDataAccessor, CaseBuilder
-                db_client = DatabaseClient()
-                accessor = CaseDataAccessor(db_client)
-                # Use the same plan_index and owner_assigner as the main builder
-                builder = CaseBuilder(accessor, plan_index=self._builder._plan_index, owner_assigner=self._builder._owner_assigner)
-                progress_key = f"{self._plan_id}|publisher:{pub_id}"
-                if self._resume and self._progress and self._progress.has(progress_key):
-                    LOGGER.info(f"[Thread {thread_name}] Skipping publisher %s (already recorded in progress)", pub_id)
-                    result = CaseResult(pub_id, False, error="Skipped (resume)")
-                    with results_lock:
-                        results.append(result)
-                    return result
-                payload = builder.build(pub_id)
-                if payload is None:
-                    result = CaseResult(pub_id, False, error="Skipped")
-                    with results_lock:
-                        results.append(result)
-                    if self._progress:
-                        with progress_lock:
-                            self._progress.record(progress_key, result)
-                    return result
-                result = self._poster.post(payload)
-                with results_lock:
-                    results.append(result)
+        def process_publisher_sequential(idx: int, pub_id: int) -> CaseResult:
+            """Process a single publisher sequentially using the main builder."""
+            LOGGER.info(f"Processing publisher {pub_id} ({idx+1}/{len(publisher_ids)})")
+            today_date = __import__("datetime").date.today().strftime("%Y-%m-%d")
+            progress_key = f"{self._plan_id}|{today_date}|publisher:{pub_id}"
+            if self._resume and self._progress and self._progress.has(progress_key):
+                LOGGER.info(f"Skipping publisher %s (already recorded in progress)", pub_id)
+                return CaseResult(pub_id, False, error="Skipped (resume)")
+            payload = self._builder.build(pub_id)
+            if payload is None:
+                status = self._builder._accessor.fetch_publisher_status(pub_id)
+                is_non_live = status != "LIVE"
+                reason = f"Skipped (status={status or 'Unknown'})" if is_non_live else "Skipped (no payload)"
+                result = CaseResult(pub_id, is_non_live, error=reason)
                 if self._progress:
-                    with progress_lock:
-                        self._progress.record(progress_key, result)
+                    self._progress.record(progress_key, result)
                 return result
-            except Exception as exc:
-                LOGGER.error(f"[Thread {thread_name}] Exception for publisher {pub_id}: {exc}\n{traceback.format_exc()}")
-                result = CaseResult(pub_id, False, error=f"Exception: {exc}")
-                with results_lock:
-                    results.append(result)
-                return result
-            finally:
-                if db_client:
-                    try:
-                        db_client.close()
-                    except Exception:
-                        pass
-                LOGGER.info(f"[Thread {thread_name}] Finished publisher {pub_id}")
+            result = self._poster.post(payload, progress_tracker=self._progress)
+            if self._progress:
+                self._progress.record(progress_key, result)
+            if self._batch_sleep:
+                time.sleep(self._batch_sleep)
+            return result
 
-        max_workers = min(8, len(publisher_ids)) if publisher_ids else 1
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [executor.submit(process_publisher, (idx, pub_id)) for idx, pub_id in enumerate(publisher_ids)]
-            for future in as_completed(futures):
-                pass
+        # Default to sequential mode (CASE_MAX_WORKERS=1) for scheduler safety
+        # Multithreading with MySQL connector can cause segfaults
+        max_workers_env = os.getenv("CASE_MAX_WORKERS")
+        try:
+            max_workers = int(max_workers_env) if max_workers_env else 1  # Default to 1 for safety
+        except ValueError:
+            max_workers = 1
+        max_workers = max(1, max_workers)
+
+        # Always use sequential mode - safest for schedulers, no segfaults
+        LOGGER.info(f"Running in sequential mode (processing {len(publisher_ids)} publishers)")
+        for idx, pub_id in enumerate(publisher_ids):
+            try:
+                result = process_publisher_sequential(idx, pub_id)
+                results.append(result)
+            except Exception as exc:
+                LOGGER.error(f"Exception for publisher {pub_id}: {exc}\n{traceback.format_exc()}")
+                results.append(CaseResult(pub_id, False, error=f"Exception: {exc}"))
         results.sort(key=lambda r: publisher_ids.index(r.publisher_id) if r.publisher_id in publisher_ids else 1e9)
         return results
 
@@ -1272,13 +1263,16 @@ class CaseRunner:
             LOGGER.info("Closing case for publisher %s (%s/%s)", pub_id, idx, len(publisher_ids))
             payload = self._builder.build(pub_id, allow_non_cloaking=True)
             if payload is None:
-                result = CaseResult(pub_id, False, error="Skipped")
+                status = self._builder._accessor.fetch_publisher_status(pub_id)
+                is_non_live = status != "LIVE"
+                reason = f"Skipped (status={status or 'Unknown'})" if is_non_live else "Skipped (no payload)"
+                result = CaseResult(pub_id, is_non_live, error=reason)
                 results.append(result)
                 if self._progress:
                     self._progress.record(progress_key, result)
                 continue
             payload.payload["status"] = status
-            result = self._poster.post(payload)
+            result = self._poster.post(payload, progress_tracker=self._progress)
             results.append(result)
             if self._progress:
                 self._progress.record(progress_key, result)
@@ -1342,7 +1336,7 @@ class CaseRunner:
         results: list[CaseResult] = []
         for payload in payloads:
             payload.payload["status"] = status
-            results.append(self._poster.post(payload))
+            results.append(self._poster.post(payload, progress_tracker=self._progress))
         if self._progress:
             self._progress.record(progress_key, CaseResult(0, all(r.success for r in results)))
         return results
@@ -1467,7 +1461,6 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
 
     try:
         if args.bulk_trigger:
-            publisher_ids = []
             if args.close:
                 results = runner.close_bulk_trigger(
                     args.bulk_trigger,

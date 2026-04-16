@@ -28,6 +28,12 @@ from config import (
 
 load_dotenv()
 LOG_FILE_PATH = str(LOG_FILE)
+TRIGGER_DETAIL_PREFIX = "Malicious URL Post-Click -"
+EXCLUDED_TRIGGER_DETAILS = {
+    "deceptive site",
+    "back button hijack",
+    "misleading product offer",
+}
 
 
 def log_message(message: str) -> None:
@@ -366,20 +372,51 @@ def enrich_alerts_with_account_info(alerts: Sequence[Dict[str, Any]]) -> List[Di
     return enriched_alerts
 
 
+def _strip_trigger_prefix(detail: str) -> str:
+    detail = detail.strip()
+    if detail.lower().startswith(TRIGGER_DETAIL_PREFIX.lower()):
+        detail = detail[len(TRIGGER_DETAIL_PREFIX):].strip(" -")
+    return detail
+
+
+def _full_trigger_detail(alert: Dict[str, Any]) -> str:
+    trigger_metadata = (alert.get("trigger_metadata") or "").strip()
+    trigger_type_name = (alert.get("trigger_type_name") or "").strip()
+
+    if trigger_metadata.lower().startswith(TRIGGER_DETAIL_PREFIX.lower()):
+        return trigger_metadata
+    if trigger_type_name.lower().startswith(TRIGGER_DETAIL_PREFIX.lower()):
+        return trigger_type_name
+    if trigger_type_name.lower() == TRIGGER_CATEGORY_NAME.strip().lower() and trigger_metadata:
+        return f"{TRIGGER_DETAIL_PREFIX}{trigger_metadata}"
+    return trigger_metadata or trigger_type_name or "Unknown Trigger"
+
+
 def filter_trigger_category(alerts: List[Dict[str, Any]], category_name: str) -> List[Dict[str, Any]]:
     category_lower = category_name.strip().lower()
-    filtered = [
-        alert
-        for alert in alerts
-        if alert.get("trigger_type_name", "").strip().lower() == category_lower
-        or alert.get("trigger_metadata", "").strip().lower() == category_lower
-    ]
+    filtered: List[Dict[str, Any]] = []
+    for alert in alerts:
+        trigger_type_name = (alert.get("trigger_type_name") or "").strip().lower()
+        detail = _full_trigger_detail(alert)
+        normalized = _strip_trigger_prefix(detail).lower()
+
+        if not detail.lower().startswith(TRIGGER_DETAIL_PREFIX.lower()):
+            continue
+        if trigger_type_name and trigger_type_name != category_lower:
+            if not trigger_type_name.startswith(TRIGGER_DETAIL_PREFIX.lower()):
+                continue
+        if normalized in EXCLUDED_TRIGGER_DETAILS:
+            continue
+
+        filtered.append(alert)
+
     log_message(f"Filtered to {len(filtered)} '{category_name}' alerts (from {len(alerts)} total)")
     return filtered
 
 
 def _normalize_trigger_detail(alert: Dict[str, Any]) -> str:
-    detail = (alert.get("trigger_metadata") or alert.get("trigger_type_name") or "Unknown Trigger").strip()
+    detail = _full_trigger_detail(alert)
+    detail = _strip_trigger_prefix(detail)
     return detail or "Unknown Trigger"
 
 

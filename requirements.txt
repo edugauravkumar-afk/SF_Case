@@ -4,3 +4,6 @@ requests
 mysql-connector-python
 vertica-python
 schedule
+
+anthropicpillow
+openpyxl

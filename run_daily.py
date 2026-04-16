@@ -19,11 +19,13 @@ from main import (
 )
 from case_creator import (
     BATCH_SLEEP,
+    CASE_OWNER_IDS,
     CASE_PLAN_PATH,
     DatabaseClient,
     CaseDataAccessor,
     CasePlanIndex,
     CaseBuilder,
+    OwnerAssigner,
     CasePoster,
     CaseRunner,
     ProgressTracker,
@@ -92,8 +94,11 @@ def _compute_missing(
             except json.JSONDecodeError:
                 continue
             key = entry.get("key")
-            if key:
-                progress[key] = entry
+            if not key:
+                continue
+            # Progress keys may include a plan id prefix (e.g. "<plan>|publisher:123").
+            normalized_key = key.split("|", 1)[1] if "|" in key else key
+            progress[normalized_key] = entry
 
     mc_done = {
         k.split(":", 1)[1]
@@ -120,11 +125,27 @@ def _compute_missing(
     return missing_mc, missing_bulk, mc_unknown, non_retriable
 
 
+def _parse_non_retriable_key(key: str) -> tuple[str | None, str | None]:
+    """Return (publisher_id, bulk_trigger) parsed from a progress key."""
+    normalized_key = key.split("|", 1)[1] if "|" in key else key
+    if normalized_key.startswith("publisher:"):
+        publisher_id = normalized_key.split(":", 1)[1]
+        return publisher_id, None
+    if normalized_key.startswith("bulk:"):
+        parts = normalized_key.split(":")
+        if len(parts) >= 2:
+            return None, parts[1]
+    return None, None
+
+
 def _run_case_creation(plan_path: Path, progress_path: Path, dry_run: bool) -> None:
     db_client = DatabaseClient()
     accessor = CaseDataAccessor(db_client)
     plan_index = CasePlanIndex(plan_path)
-    builder = CaseBuilder(accessor, plan_index=plan_index)
+    from assignment_utils import get_case_owner_ids_for_today
+    owners = get_case_owner_ids_for_today()
+    owner_assigner = OwnerAssigner(owners) if owners else None
+    builder = CaseBuilder(accessor, plan_index=plan_index, owner_assigner=owner_assigner)
     poster = CasePoster(dry_run=dry_run)
     progress = ProgressTracker(progress_path)
     runner = CaseRunner(
@@ -171,6 +192,7 @@ def run_once(args: argparse.Namespace) -> None:
     reporter = GeoEdgeEmailReporter()
     deadline = time.time() + (args.max_runtime_hours * 3600)
     sleep_seconds = args.min_sleep
+    non_retriable_seen: dict[str, dict[str, Any]] = {}
 
     while True:
         _run_case_creation(plan_path, progress_path, args.dry_run)
@@ -181,33 +203,69 @@ def run_once(args: argparse.Namespace) -> None:
             log_message(f"Skipped {len(unknown_mc)} cloaking accounts without IDs: {', '.join(unknown_mc[:5])}")
 
         if non_retriable:
-            html_body = "".join(
-                [
-                    "<p>Non-retriable failures detected.</p>",
-                    "<ul>",
-                    *[f"<li>{item['key']} (status {item['status']}): {item['error']}</li>" for item in non_retriable],
-                    "</ul>",
-                ]
+            for item in non_retriable:
+                key = str(item.get("key") or "")
+                if key:
+                    non_retriable_seen[key] = item
+
+            blocked_publishers: set[str] = set()
+            blocked_bulk_triggers: set[str] = set()
+            for item in non_retriable_seen.values():
+                publisher_id, bulk_trigger = _parse_non_retriable_key(str(item.get("key") or ""))
+                if publisher_id:
+                    blocked_publishers.add(publisher_id)
+                if bulk_trigger:
+                    blocked_bulk_triggers.add(bulk_trigger)
+
+            if blocked_publishers:
+                missing_mc = [aid for aid in missing_mc if aid not in blocked_publishers]
+            if blocked_bulk_triggers:
+                missing_bulk = [trigger for trigger in missing_bulk if trigger not in blocked_bulk_triggers]
+
+            log_message(
+                "Non-retriable items detected and excluded from retries: "
+                f"publishers={len(blocked_publishers)}, bulk_triggers={len(blocked_bulk_triggers)}"
             )
-            reporter.send_run_report(
-                subject="GeoEdge Case Run Failed",
-                html_body=html_body,
-            )
-            raise RuntimeError("Non-retriable failures detected")
 
         if not missing_mc and not missing_bulk:
-            log_message("All planned cases were created successfully.")
-            reporter.send_run_report(
-                subject="GeoEdge Case Run Completed",
-                html_body="<p>All planned cases were created successfully.</p>",
-            )
+            if non_retriable_seen:
+                html_body = "".join(
+                    [
+                        "<p>Run completed with non-retriable skips (400/404).</p>",
+                        "<ul>",
+                        *[
+                            f"<li>{item['key']} (status {item['status']}): {item['error']}</li>"
+                            for item in non_retriable_seen.values()
+                        ],
+                        "</ul>",
+                    ]
+                )
+                reporter.send_run_report(
+                    subject="GeoEdge Case Run Completed With Skips",
+                    html_body=html_body,
+                )
+                log_message(
+                    f"Run completed with {len(non_retriable_seen)} non-retriable skipped item(s)."
+                )
+            else:
+                log_message("All planned cases were created successfully.")
+                reporter.send_run_report(
+                    subject="GeoEdge Case Run Completed",
+                    html_body="<p>All planned cases were created successfully.</p>",
+                )
             return
 
         if time.time() >= deadline:
+            non_retriable_note = (
+                f"<p>Non-retriable skipped items: {len(non_retriable_seen)}</p>"
+                if non_retriable_seen
+                else ""
+            )
             html_body = (
                 f"<p>Case creation incomplete after {args.max_runtime_hours}h.</p>"
                 f"<p>Missing cloaking accounts: {len(missing_mc)}</p>"
                 f"<p>Missing bulk triggers: {len(missing_bulk)}</p>"
+                f"{non_retriable_note}"
             )
             reporter.send_run_report(
                 subject="GeoEdge Case Run Failed",
